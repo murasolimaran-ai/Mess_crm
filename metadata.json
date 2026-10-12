@@ -1,0 +1,6 @@
+{
+  "name": "Hostel Mess Management & Smart Billing System",
+  "description": "Enterprise hostel mess management and fast point-of-sale billing system for students, cashiers, and administrators.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
