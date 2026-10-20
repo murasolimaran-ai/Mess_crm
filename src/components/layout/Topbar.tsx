@@ -7,14 +7,16 @@ import {
   Bell,
   Menu,
   Calendar,
-  AlertTriangle,
-  Receipt,
+  Clock,
   User as UserIcon,
   ChevronDown,
   LogOut,
   RefreshCw,
-  PlusCircle,
-  ExternalLink,
+  Utensils,
+  CheckCircle2,
+  AlertTriangle,
+  Receipt,
+  UserCheck,
 } from 'lucide-react';
 
 interface TopbarProps {
@@ -28,47 +30,49 @@ export const Topbar: React.FC<TopbarProps> = ({ onMobileMenuToggle }) => {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearchResults, setShowSearchResults] = useState(false);
-  const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
 
   const searchRef = useRef<HTMLDivElement>(null);
-  const notifRef = useRef<HTMLDivElement>(null);
   const userRef = useRef<HTMLDivElement>(null);
+  const notifRef = useRef<HTMLDivElement>(null);
 
-  // Close dropdowns on outside click
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
         setShowSearchResults(false);
       }
-      if (notifRef.current && !notifRef.current.contains(event.target as Node)) {
-        setShowNotifications(false);
-      }
       if (userRef.current && !userRef.current.contains(event.target as Node)) {
         setShowUserMenu(false);
+      }
+      if (notifRef.current && !notifRef.current.contains(event.target as Node)) {
+        setShowNotifications(false);
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Compute Breadcrumb based on path
-  const pathMap: Record<string, string> = {
-    '/': 'Overview',
-    '/billing': 'Billing / Point of Sale',
-    '/students': 'Student Directory',
-    '/products': 'Products & Menu Catalog',
-    '/transactions': 'Bills & Transactions',
-    '/analytics': 'Sales & Analytics',
-    '/inventory': 'Inventory & Stock Management',
-    '/cashiers': 'Cashiers & Shift Reconciliations',
-    '/reconciliation': 'Payment Reconciliation',
-    '/audit-logs': 'Immutable Audit Logs',
-    '/users': 'System User Administration',
-    '/settings': 'Mess Configuration & Settings',
+  const pathMap: Record<string, { title: string; section: string }> = {
+    '/': { title: 'Admin Overview Dashboard', section: 'Overview' },
+    '/billing': { title: 'High-Speed Point of Sale Billing', section: 'Billing / POS' },
+    '/students': { title: 'Students Directory & Spend Ledgers', section: 'Students' },
+    '/products': { title: 'Food Menu & Product Catalog', section: 'Products & Menu' },
+    '/transactions': { title: 'Bills & Transaction Ledger', section: 'Bills & Transactions' },
+    '/analytics': { title: 'Sales Analytics & Revenue Reports', section: 'Sales & Analytics' },
+    '/inventory': { title: 'Food Inventory & Stock Valuation', section: 'Inventory' },
+    '/cashiers': { title: 'Cashier Shift Logs & Cash Drawers', section: 'Cashiers & Shifts' },
+    '/reconciliation': { title: 'Daily End-of-Day Payment Reconciliation', section: 'Reconciliation' },
+    '/audit-logs': { title: 'Immutable System Audit Trail', section: 'Audit Logs' },
+    '/users': { title: 'User Management & Role Permissions', section: 'User Management' },
+    '/settings': { title: 'Mess ERP Configuration & Rules', section: 'Settings' },
+    '/student-portal': { title: 'Student Dining Account & Self-Service Portal', section: 'Student Portal' },
   };
 
-  const currentTitle = pathMap[location.pathname] || 'Dashboard';
+  const currentRouteMeta = pathMap[location.pathname] || {
+    title: 'Hostel Mess Smart Management',
+    section: 'Hostel Mess',
+  };
 
   // Global search filtering
   const q = searchQuery.trim().toLowerCase();
@@ -78,32 +82,28 @@ export const Topbar: React.FC<TopbarProps> = ({ onMobileMenuToggle }) => {
           (s) =>
             s.name.toLowerCase().includes(q) ||
             s.id.toLowerCase().includes(q) ||
-            s.roomNumber.toLowerCase().includes(q)
+            s.roomNumber.toLowerCase().includes(q) ||
+            s.department.toLowerCase().includes(q)
         )
         .slice(0, 4)
     : [];
 
   const matchingProducts = q
     ? state.products
-        .filter(
-          (p) =>
-            p.name.toLowerCase().includes(q) ||
-            p.code.toLowerCase().includes(q) ||
-            p.category.toLowerCase().includes(q)
-        )
+        .filter((p) => p.name.toLowerCase().includes(q) || p.code.toLowerCase().includes(q))
         .slice(0, 3)
     : [];
 
   const matchingBills = q
     ? state.bills
-        .filter((b) => b.billNumber.toLowerCase().includes(q) || b.studentName.toLowerCase().includes(q))
+        .filter(
+          (b) =>
+            b.billNumber.toLowerCase().includes(q) ||
+            b.studentName.toLowerCase().includes(q) ||
+            b.studentId.toLowerCase().includes(q)
+        )
         .slice(0, 3)
     : [];
-
-  // Low stock notifications
-  const lowStockItems = state.products.filter(
-    (p) => p.isStockTracked && p.stockQuantity <= p.minStockThreshold
-  );
 
   const businessDate = new Date().toLocaleDateString('en-IN', {
     weekday: 'short',
@@ -112,258 +112,245 @@ export const Topbar: React.FC<TopbarProps> = ({ onMobileMenuToggle }) => {
     year: 'numeric',
   });
 
+  const lowStockCount = state.products.filter(
+    (p) => p.isStockTracked && p.stockQuantity <= p.minStockThreshold
+  ).length;
+
   return (
-    <header className="sticky top-0 z-30 h-16 bg-white border-b border-slate-200 px-4 md:px-6 flex items-center justify-between gap-4 no-print">
-      {/* Left: Mobile hamburger & Breadcrumb */}
+    <header className="sticky top-0 z-30 h-16 bg-white border-b border-slate-200 px-4 md:px-6 flex items-center justify-between gap-4 no-print shadow-xs">
+      {/* Left: Mobile menu button & Breadcrumbs */}
       <div className="flex items-center gap-3">
         <button
           onClick={onMobileMenuToggle}
-          className="p-2 -ml-1 text-slate-600 hover:text-slate-900 rounded-lg md:hidden"
-          aria-label="Open menu"
+          className="md:hidden p-2 rounded-xl text-slate-600 hover:bg-slate-100 focus:outline-none"
         >
           <Menu className="w-5 h-5" />
         </button>
 
-        <div className="flex items-center gap-2 text-xs md:text-sm">
-          <span className="text-slate-400 font-medium">Mess ERP</span>
-          <span className="text-slate-300">/</span>
-          <span className="font-semibold text-slate-900 truncate">{currentTitle}</span>
+        <div className="hidden sm:flex flex-col">
+          <div className="flex items-center gap-2 text-xs text-slate-400 font-medium">
+            <span>Mess ERP</span>
+            <span>/</span>
+            <span className="text-slate-700 font-semibold">{currentRouteMeta.section}</span>
+          </div>
+          <h1 className="text-sm md:text-base font-bold text-slate-900 leading-tight">
+            {currentRouteMeta.title}
+          </h1>
         </div>
       </div>
 
-      {/* Middle: Global Search Bar */}
-      <div ref={searchRef} className="relative flex-1 max-w-md hidden sm:block">
+      {/* Center: Global Search (Hidden for students to ensure strict privacy) */}
+      {currentUser.role !== 'student' ? (
+        <div ref={searchRef} className="flex-1 max-w-md relative hidden md:block">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input
             type="text"
-            placeholder="Search student ID, name, room, dish, or bill no..."
+            placeholder="Search students (STU-001...), menu dishes, bills..."
             value={searchQuery}
             onChange={(e) => {
               setSearchQuery(e.target.value);
               setShowSearchResults(true);
             }}
             onFocus={() => setShowSearchResults(true)}
-            className="w-full text-xs pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white transition-all"
+            className="w-full pl-9 pr-4 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
           />
         </div>
 
-        {/* Global Search Results Dropdown */}
-        {showSearchResults && searchQuery.trim() && (
-          <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-xl border border-slate-200 p-2 text-xs divide-y divide-slate-100 z-50 max-h-96 overflow-y-auto">
-            {/* Students */}
-            {matchingStudents.length > 0 && (
-              <div className="py-2">
-                <span className="px-2 text-[10px] font-bold uppercase text-slate-400 tracking-wider">
-                  Students ({matchingStudents.length})
-                </span>
-                {matchingStudents.map((s) => (
-                  <button
-                    key={s.id}
-                    onClick={() => {
-                      navigate(`/students/${s.id}`);
-                      setShowSearchResults(false);
-                      setSearchQuery('');
-                    }}
-                    className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-slate-50 flex items-center justify-between"
-                  >
-                    <div>
-                      <span className="font-semibold text-slate-900">{s.name}</span>
-                      <span className="text-slate-500 ml-1.5">({s.id} · {s.roomNumber})</span>
+        {/* Search Results Dropdown */}
+        {showSearchResults && searchQuery.trim().length > 0 && (
+          <div className="absolute left-0 right-0 top-full mt-1.5 bg-white rounded-xl border border-slate-200 shadow-xl overflow-hidden z-50 text-xs divide-y divide-slate-100">
+            {matchingStudents.length === 0 &&
+            matchingProducts.length === 0 &&
+            matchingBills.length === 0 ? (
+              <div className="p-4 text-center text-slate-500">No matching records found.</div>
+            ) : (
+              <>
+                {matchingStudents.length > 0 && (
+                  <div className="p-2">
+                    <div className="text-[10px] uppercase font-bold text-slate-400 px-2 py-1">
+                      Students
                     </div>
-                    <span className="text-[10px] text-blue-600 font-medium">View Profile →</span>
-                  </button>
-                ))}
-              </div>
-            )}
+                    {matchingStudents.map((s) => (
+                      <button
+                        key={s.id}
+                        onClick={() => {
+                          setShowSearchResults(false);
+                          setSearchQuery('');
+                          navigate(`/students/${s.id}`);
+                        }}
+                        className="w-full text-left px-3 py-1.5 rounded-lg hover:bg-blue-50 flex items-center justify-between"
+                      >
+                        <div>
+                          <span className="font-bold text-slate-900">{s.name}</span>
+                          <span className="text-[11px] text-slate-500 ml-2 font-mono">
+                            {s.id} &middot; Room {s.roomNumber}
+                          </span>
+                        </div>
+                        <span className="text-[10px] text-blue-600 font-semibold">View Ledger</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
 
-            {/* Products */}
-            {matchingProducts.length > 0 && (
-              <div className="py-2">
-                <span className="px-2 text-[10px] font-bold uppercase text-slate-400 tracking-wider">
-                  Food Products ({matchingProducts.length})
-                </span>
-                {matchingProducts.map((p) => (
-                  <button
-                    key={p.id}
-                    onClick={() => {
-                      navigate('/products');
-                      setShowSearchResults(false);
-                      setSearchQuery('');
-                    }}
-                    className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-slate-50 flex items-center justify-between"
-                  >
-                    <span className="font-semibold text-slate-900">{p.name}</span>
-                    <span className="text-slate-600 font-mono font-medium">{formatINR(p.price)}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {/* Bills */}
-            {matchingBills.length > 0 && (
-              <div className="py-2">
-                <span className="px-2 text-[10px] font-bold uppercase text-slate-400 tracking-wider">
-                  Bills &amp; Invoices
-                </span>
-                {matchingBills.map((b) => (
-                  <button
-                    key={b.id}
-                    onClick={() => {
-                      navigate('/transactions');
-                      setShowSearchResults(false);
-                      setSearchQuery('');
-                    }}
-                    className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-slate-50 flex items-center justify-between"
-                  >
-                    <div>
-                      <span className="font-semibold text-slate-900">{b.billNumber}</span>
-                      <span className="text-slate-500 ml-1.5">{b.studentName}</span>
+                {matchingProducts.length > 0 && (
+                  <div className="p-2">
+                    <div className="text-[10px] uppercase font-bold text-slate-400 px-2 py-1">
+                      Dishes &amp; Products
                     </div>
-                    <span className="font-mono font-bold text-slate-900">{formatINR(b.total)}</span>
-                  </button>
-                ))}
-              </div>
-            )}
+                    {matchingProducts.map((p) => (
+                      <button
+                        key={p.id}
+                        onClick={() => {
+                          setShowSearchResults(false);
+                          setSearchQuery('');
+                          navigate('/products');
+                        }}
+                        className="w-full text-left px-3 py-1.5 rounded-lg hover:bg-blue-50 flex items-center justify-between"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span>{p.imageEmoji}</span>
+                          <span className="font-semibold text-slate-800">{p.name}</span>
+                        </div>
+                        <span className="font-bold font-mono text-slate-900">{formatINR(p.price)}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
 
-            {matchingStudents.length === 0 && matchingProducts.length === 0 && matchingBills.length === 0 && (
-              <div className="py-4 text-center text-slate-400">
-                No matching records found for "{searchQuery}"
-              </div>
+                {matchingBills.length > 0 && (
+                  <div className="p-2">
+                    <div className="text-[10px] uppercase font-bold text-slate-400 px-2 py-1">
+                      Bills
+                    </div>
+                    {matchingBills.map((b) => (
+                      <button
+                        key={b.id}
+                        onClick={() => {
+                          setShowSearchResults(false);
+                          setSearchQuery('');
+                          navigate('/transactions');
+                        }}
+                        className="w-full text-left px-3 py-1.5 rounded-lg hover:bg-blue-50 flex items-center justify-between"
+                      >
+                        <div>
+                          <span className="font-bold font-mono text-blue-600">{b.billNumber}</span>
+                          <span className="text-slate-600 ml-2">{b.studentName}</span>
+                        </div>
+                        <span className="font-bold font-mono text-slate-900">
+                          {formatINR(b.totalAmount)}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}
       </div>
+      ) : (
+        <div className="flex-1" />
+      )}
 
-      {/* Right Zone: Date, Notifications, User Menu */}
+      {/* Right Controls: Business Date, Notification bell, User info */}
       <div className="flex items-center gap-3">
-        {/* Current Business Date */}
-        <div className="hidden lg:flex items-center gap-1.5 text-xs font-medium text-slate-600 bg-slate-100/80 px-3 py-1.5 rounded-lg border border-slate-200">
-          <Calendar className="w-3.5 h-3.5 text-slate-500" />
-          <span>{businessDate}</span>
+        {/* Business Date */}
+        <div className="hidden lg:flex items-center gap-1.5 px-3 py-1 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-600">
+          <Calendar className="w-3.5 h-3.5 text-blue-600" />
+          <span className="font-medium">{businessDate}</span>
         </div>
 
-        {/* Notifications Icon & Popover */}
+        {/* Notifications Icon with popover */}
         <div ref={notifRef} className="relative">
           <button
             onClick={() => setShowNotifications(!showNotifications)}
-            className="p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl relative transition-colors"
-            title="Notifications & Alerts"
+            className="p-2 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 relative focus:outline-none transition-colors"
+            title="Notifications"
           >
             <Bell className="w-5 h-5" />
-            {lowStockItems.length > 0 && (
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-amber-500 rounded-full" />
+            {lowStockCount > 0 && (
+              <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-rose-500 rounded-full ring-2 ring-white" />
             )}
           </button>
 
           {showNotifications && (
-            <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-xl border border-slate-200 p-3 z-50">
+            <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-2xl border border-slate-200 shadow-xl p-3 z-50 text-xs space-y-2">
               <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-                <span className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-                  Mess System Notifications
-                </span>
-                <span className="text-[10px] text-slate-500">
-                  {lowStockItems.length} active alerts
-                </span>
+                <span className="font-bold text-slate-900">Notifications &amp; Alerts</span>
+                <span className="text-[10px] text-slate-500 font-mono">Live</span>
               </div>
-              <div className="py-2 space-y-2 max-h-72 overflow-y-auto">
-                {lowStockItems.length > 0 ? (
-                  lowStockItems.map((item) => (
-                    <div
-                      key={item.id}
-                      className="p-2.5 rounded-lg bg-amber-50/70 border border-amber-200/80 text-xs flex items-start gap-2.5"
-                    >
-                      <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                      <div className="min-w-0 flex-1">
-                        <div className="font-semibold text-amber-900">{item.name}</div>
-                        <div className="text-[11px] text-amber-700">
-                          Low stock warning: Only {item.stockQuantity} {item.unit} left (threshold:{' '}
-                          {item.minStockThreshold}).
-                        </div>
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <div className="p-4 text-center text-xs text-slate-500">
-                    All inventory levels within safe operational thresholds.
+
+              {lowStockCount > 0 ? (
+                <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-2 text-rose-900">
+                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                  <div>
+                    <strong className="block">Low Stock Alert</strong>
+                    <span>{lowStockCount} food items have reached minimum threshold.</span>
                   </div>
-                )}
-              </div>
-              <div className="pt-2 border-t border-slate-100 flex justify-end">
+                </div>
+              ) : (
+                <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl flex items-start gap-2 text-emerald-900">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                  <div>
+                    <strong className="block">Inventory Healthy</strong>
+                    <span>All tracked finished products are within safe stock margins.</span>
+                  </div>
+                </div>
+              )}
+
+              <div className="pt-2 border-t border-slate-100">
                 <Link
                   to="/inventory"
                   onClick={() => setShowNotifications(false)}
-                  className="text-xs font-semibold text-blue-600 hover:text-blue-700"
+                  className="block text-center text-blue-600 font-semibold hover:underline"
                 >
-                  Manage Inventory &rarr;
+                  Manage Stock Inventory &rarr;
                 </Link>
               </div>
             </div>
           )}
         </div>
 
-        {/* User Account Popover */}
+        {/* User Account Menu */}
         <div ref={userRef} className="relative">
           <button
             onClick={() => setShowUserMenu(!showUserMenu)}
-            className="flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-xl border border-slate-200 hover:border-slate-300 hover:bg-slate-50 transition-colors text-left"
+            className="flex items-center gap-2.5 p-1.5 pl-2.5 rounded-xl border border-slate-200 hover:border-slate-300 hover:bg-slate-50 transition-colors focus:outline-none"
           >
-            <div className="w-7 h-7 rounded-lg bg-blue-600 text-white font-bold flex items-center justify-center text-xs">
+            <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold text-xs">
               {currentUser.name.charAt(0)}
             </div>
-            <div className="hidden sm:block text-left">
-              <span className="block text-xs font-semibold text-slate-900 leading-tight">
-                {currentUser.name.split(' ')[0]}
-              </span>
-              <span className="block text-[10px] text-slate-500 uppercase font-medium">
+            <div className="text-left hidden sm:block">
+              <div className="text-xs font-bold text-slate-900 leading-tight">
+                {currentUser.name}
+              </div>
+              <div className="text-[10px] text-blue-600 font-semibold uppercase tracking-wider">
                 {currentUser.role}
-              </span>
+              </div>
             </div>
             <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
           </button>
 
           {showUserMenu && (
-            <div className="absolute right-0 mt-2 w-64 bg-white rounded-xl shadow-xl border border-slate-200 p-2 z-50">
-              <div className="p-2 border-b border-slate-100 mb-1">
-                <p className="text-xs font-bold text-slate-900">{currentUser.name}</p>
-                <p className="text-[11px] text-slate-500">{currentUser.email}</p>
-                <span className="inline-block mt-1 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
-                  Role: {currentUser.role}
+            <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-2xl border border-slate-200 shadow-xl py-2 z-50 text-xs">
+              <div className="px-4 py-2 border-b border-slate-100">
+                <p className="font-bold text-slate-900 truncate">{currentUser.name}</p>
+                <p className="text-[11px] text-slate-500 truncate">{currentUser.email}</p>
+                <span className="inline-block mt-1 px-2 py-0.5 bg-blue-100 text-blue-800 rounded font-semibold text-[10px] uppercase">
+                  {currentUser.role} Account
                 </span>
               </div>
 
-              {/* Quick switch between demo roles */}
-              <div className="py-1">
-                <span className="px-2 text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
-                  Demo Switch Account
-                </span>
-                {state.users.map((u) => (
-                  <button
-                    key={u.id}
-                    onClick={() => {
-                      navigate('/');
-                      useMess; // context
-                      window.location.reload();
-                    }}
-                    className={`w-full text-left px-2 py-1.5 rounded text-xs flex items-center justify-between ${
-                      u.id === currentUser.id ? 'bg-slate-100 font-semibold' : 'hover:bg-slate-50'
-                    }`}
-                  >
-                    <span>{u.name}</span>
-                    <span className="text-[10px] uppercase text-slate-500 font-mono">{u.role}</span>
-                  </button>
-                ))}
-              </div>
-
-              <div className="pt-2 border-t border-slate-100 space-y-1">
+              <div className="p-1">
                 <button
                   onClick={() => {
                     setShowUserMenu(false);
                     resetDemoData();
                   }}
-                  className="w-full text-left px-2.5 py-1.5 rounded text-xs text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                  className="w-full text-left px-3 py-2 rounded-xl text-amber-700 hover:bg-amber-50 flex items-center gap-2 font-medium"
                 >
-                  <RefreshCw className="w-3.5 h-3.5 text-slate-500" />
+                  <RefreshCw className="w-4 h-4 text-amber-600" />
                   <span>Reset Demo Data</span>
                 </button>
 
@@ -373,10 +360,10 @@ export const Topbar: React.FC<TopbarProps> = ({ onMobileMenuToggle }) => {
                     logout();
                     navigate('/login');
                   }}
-                  className="w-full text-left px-2.5 py-1.5 rounded text-xs text-rose-600 hover:bg-rose-50 flex items-center gap-2 font-medium"
+                  className="w-full text-left px-3 py-2 rounded-xl text-rose-600 hover:bg-rose-50 flex items-center gap-2 font-medium"
                 >
-                  <LogOut className="w-3.5 h-3.5" />
-                  <span>Sign Out</span>
+                  <LogOut className="w-4 h-4 text-rose-500" />
+                  <span>Switch Account / Logout</span>
                 </button>
               </div>
             </div>

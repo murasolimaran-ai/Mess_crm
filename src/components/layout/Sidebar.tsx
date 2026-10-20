@@ -10,9 +10,9 @@ import {
   BarChart3,
   Boxes,
   Clock,
-  Landmark,
-  FileSpreadsheet,
-  ShieldAlert,
+  ShieldCheck,
+  FileText,
+  UserCheck,
   Settings,
   ChevronLeft,
   ChevronRight,
@@ -36,44 +36,68 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const { currentUser, logout, state } = useMess();
   const location = useLocation();
 
-  const isAdmin = currentUser.role === 'admin';
-
   interface NavItem {
     label: string;
     to: string;
     icon: React.ComponentType<{ className?: string }>;
     highlight?: boolean;
-    count?: number;
+    badge?: string;
   }
 
-  // Navigation definition based on role
+  const activeShift = state.activeShift;
+
   const adminNavItems: NavItem[] = [
     { label: 'Overview', to: '/', icon: LayoutDashboard },
-    { label: 'Billing / POS', to: '/billing', icon: ShoppingCart, highlight: true },
-    { label: 'Students', to: '/students', icon: Users, count: state.students.length },
-    { label: 'Products & Menu', to: '/products', icon: UtensilsCrossed, count: state.products.length },
-    { label: 'Bills & Transactions', to: '/transactions', icon: Receipt, count: state.bills.length },
+    {
+      label: 'Billing / POS',
+      to: '/billing',
+      icon: ShoppingCart,
+      highlight: true,
+      badge: activeShift ? 'POS ACTIVE' : undefined,
+    },
+    { label: 'Students', to: '/students', icon: Users },
+    { label: 'Products & Menu', to: '/products', icon: UtensilsCrossed },
+    { label: 'Bills & Transactions', to: '/transactions', icon: Receipt },
     { label: 'Sales & Analytics', to: '/analytics', icon: BarChart3 },
     { label: 'Inventory', to: '/inventory', icon: Boxes },
     { label: 'Cashiers & Shifts', to: '/cashiers', icon: Clock },
-    { label: 'Payment Reconciliation', to: '/reconciliation', icon: Landmark },
-    { label: 'Audit Logs', to: '/audit-logs', icon: ShieldAlert },
-    { label: 'User Management', to: '/users', icon: Users },
+    { label: 'Payment Reconciliation', to: '/reconciliation', icon: ShieldCheck },
+    { label: 'Audit Logs', to: '/audit-logs', icon: FileText },
+    { label: 'User Management', to: '/users', icon: UserCheck },
     { label: 'Settings', to: '/settings', icon: Settings },
   ];
 
-  // Cashier role has streamlined navigation
   const cashierNavItems: NavItem[] = [
-    { label: 'Billing / POS', to: '/billing', icon: ShoppingCart, highlight: true },
+    {
+      label: 'Billing / POS',
+      to: '/billing',
+      icon: ShoppingCart,
+      highlight: true,
+      badge: 'QUICK POS',
+    },
     { label: 'My Transactions', to: '/transactions', icon: Receipt },
-    { label: 'Shift Summary', to: '/cashiers', icon: Clock },
+    { label: 'Cashier Shift Summary', to: '/cashiers', icon: Clock },
   ];
 
-  const navItems: NavItem[] = isAdmin ? adminNavItems : cashierNavItems;
+  const studentNavItems: NavItem[] = [
+    {
+      label: 'My Mess Account',
+      to: '/student-portal',
+      icon: UserCheck,
+      highlight: true,
+      badge: 'SELF SERVICE',
+    },
+  ];
+
+  const navItems =
+    currentUser.role === 'admin'
+      ? adminNavItems
+      : currentUser.role === 'student'
+      ? studentNavItems
+      : cashierNavItems;
 
   return (
     <>
-      {/* Mobile backdrop */}
       {mobileOpen && (
         <div
           className="fixed inset-0 z-40 bg-slate-900/50 backdrop-blur-xs md:hidden"
@@ -95,10 +119,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {!collapsed && (
               <div className="min-w-0">
                 <span className="block text-sm font-bold tracking-tight text-white truncate">
-                  Hostel Mess POS
+                  Hostel Mess ERP
                 </span>
                 <span className="block text-[11px] text-blue-300 font-medium truncate">
-                  Smart Billing System
+                  Smart POS &amp; Billing
                 </span>
               </div>
             )}
@@ -113,24 +137,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </button>
         </div>
 
-        {/* User Role Tag */}
+        {/* Current Active User Status Badge */}
         {!collapsed && (
-          <div className="px-4 py-2.5 bg-blue-950/40 border-b border-blue-900/30 flex items-center justify-between">
-            <div className="flex items-center gap-2 truncate">
-              <span className="text-xs text-blue-200 truncate">{currentUser.name}</span>
+          <div className="px-4 py-2.5 bg-blue-950/40 border-b border-blue-900/40 flex items-center justify-between text-xs">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="text-slate-300 font-medium">Logged in as</span>
             </div>
-            <span
-              className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
-                isAdmin ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-              }`}
-            >
+            <span className="font-bold text-white uppercase text-[10px] tracking-wider px-2 py-0.5 rounded bg-blue-900/80 text-blue-200">
               {currentUser.role}
             </span>
           </div>
         )}
 
         {/* Navigation List */}
-        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+        <nav className="flex-1 px-3 py-3 space-y-1 overflow-y-auto">
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = location.pathname === item.to;
@@ -140,24 +161,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 key={item.to}
                 to={item.to}
                 onClick={onMobileClose}
-                className={({ isActive }) =>
-                  `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                    isActive
-                      ? 'bg-blue-600 text-white font-semibold shadow-xs'
-                      : item.highlight
-                      ? 'text-emerald-300 hover:text-white hover:bg-blue-900/50 bg-emerald-950/30 border border-emerald-800/40'
-                      : 'text-slate-300 hover:text-white hover:bg-blue-900/40'
-                  } ${collapsed ? 'justify-center px-0' : ''}`
-                }
+                className={`flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition-all ${
+                  isActive
+                    ? 'bg-blue-600 text-white font-bold shadow-xs'
+                    : item.highlight
+                    ? 'text-emerald-300 hover:text-white bg-emerald-950/30 border border-emerald-800/40'
+                    : 'text-slate-300 hover:text-white hover:bg-blue-900/40'
+                } ${collapsed ? 'justify-center px-0' : ''}`}
                 title={collapsed ? item.label : undefined}
               >
-                <Icon className={`w-5 h-5 shrink-0 ${isActive ? 'text-white' : item.highlight ? 'text-emerald-400' : 'text-blue-300'}`} />
-                {!collapsed && (
-                  <span className="truncate flex-1">{item.label}</span>
-                )}
-                {!collapsed && item.count !== undefined && !isActive && (
-                  <span className="text-[11px] font-mono text-blue-300/80 bg-blue-900/60 px-1.5 py-0.5 rounded">
-                    {item.count}
+                <Icon
+                  className={`w-4 h-4 shrink-0 ${
+                    isActive ? 'text-white' : item.highlight ? 'text-emerald-400' : 'text-blue-300'
+                  }`}
+                />
+                {!collapsed && <span className="truncate flex-1">{item.label}</span>}
+                {!collapsed && item.badge && (
+                  <span className="text-[9px] font-mono px-1.5 py-0.5 rounded font-bold bg-emerald-600 text-white">
+                    {item.badge}
                   </span>
                 )}
               </NavLink>
@@ -165,18 +186,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
           })}
         </nav>
 
-        {/* Footer info & Logout */}
-        <div className="p-3 border-t border-blue-900/60 bg-blue-950/30 space-y-1">
+        {/* User Info & Switch */}
+        <div className="p-3 border-t border-blue-900/60 bg-blue-950/40 space-y-2">
+          {!collapsed && (
+            <div className="text-[11px] text-blue-200">
+              <span className="font-bold text-white block truncate">{currentUser.name}</span>
+              <span className="text-[10px] text-blue-400 font-mono truncate block">
+                {currentUser.email}
+              </span>
+            </div>
+          )}
           <NavLink
             to="/login"
-            onClick={logout}
-            className={`flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold text-rose-300 hover:bg-rose-950/40 hover:text-rose-200 transition-colors ${
+            onClick={(e) => {
+              logout();
+            }}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold text-rose-300 hover:bg-rose-950/40 transition-colors ${
               collapsed ? 'justify-center px-0' : ''
             }`}
-            title="Log Out"
+            title="Sign Out / Switch Account"
           >
-            <LogOut className="w-4 h-4 shrink-0 text-rose-400" />
-            {!collapsed && <span>Switch Account / Exit</span>}
+            <LogOut className="w-3.5 h-3.5 text-rose-400" />
+            {!collapsed && <span>Sign Out / Switch</span>}
           </NavLink>
         </div>
       </aside>

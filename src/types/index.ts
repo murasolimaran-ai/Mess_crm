@@ -1,10 +1,30 @@
-export type UserRole = 'admin' | 'cashier';
+export type UserRole = 'admin' | 'cashier' | 'student';
+
+export type FacilityCategory =
+  | "Men's Hostel"
+  | "Men's Mess"
+  | "Women's Mess"
+  | "Men's PG"
+  | "Women's Hostel / PG"
+  | "General / Central";
+
+export type CashierDesignation =
+  | "Men's Hostel Cashier"
+  | "Men's Mess Cashier"
+  | "Women's Mess Cashier"
+  | "System Administrator"
+  | "Counter Cashier";
+
+export type GenderCategory = 'Men' | 'Women' | 'Co-ed';
 
 export interface User {
-  id: string;
-  username: string;
+  id: string; // Editable & customizable User ID (e.g. "USR-001", "MENS-HOSTEL-01", "STU-001")
+  username: string; // Editable & customizable username (e.g. "admin", "mens_cashier", "stu-001")
   name: string;
   role: UserRole;
+  category?: FacilityCategory | string; // e.g. "Men's Hostel", "Men's Mess", "Women's Mess", "Men's PG"
+  designation?: CashierDesignation | string; // e.g. "Men's Hostel Cashier", "Men's Mess Cashier", "Women's Mess Cashier"
+  genderCategory?: GenderCategory; // "Men" | "Women" | "Co-ed"
   email: string;
   phone: string;
   active: boolean;
@@ -16,43 +36,91 @@ export interface User {
 export type StudentStatus = 'active' | 'inactive' | 'suspended';
 
 export interface Student {
-  id: string; // STU-001 ... STU-500
+  id: string; // e.g. "STU-001" to "STU-500"
   name: string;
   department: string;
   year: number; // 1, 2, 3, 4
-  roomNumber: string; // e.g. A-204, B-112
-  hostelBlock: string; // A, B, C, D
+  roomNumber: string;
+  hostelBlock: string; // "Block A", "Block B", "Block C", "Block D"
+  category?: string; // "Men's Hostel", "Men's Mess", "Women's Mess", "Men's PG"
   phone: string;
   email: string;
+  password?: string; // Optional custom student portal password (defaults to phone number)
+  isFirstLoginDone?: boolean; // Set to true after first-time activation
   status: StudentStatus;
-  barcode: string;
   creditLimit: number;
   monthlySpending: number;
   totalSpending: number;
-  billsCount: number;
+  pendingBalance: number;
+  balance: number; // alias for pendingBalance
   createdAt: string;
+  billsCount?: number;
+  barcode?: string;
 }
 
-export type ProductCategory = 
-  | 'Meals & Thali'
+export interface StudentPayment {
+  id: string;
+  paymentNumber: string;
+  studentId: string;
+  studentName: string;
+  amount: number;
+  paymentMethod: 'upi' | 'card' | 'netbanking' | 'qr';
+  transactionRef: string;
+  timestamp: string;
+  previousBalance: number;
+  remainingBalance: number;
+  status: 'success' | 'failed';
+  notes?: string;
+}
+
+export type ProductCategory =
   | 'Breakfast & Tiffin'
+  | 'Lunch & Dinner'
   | 'Snacks & Quick Bites'
-  | 'Beverages'
-  | 'Extras & Breads'
-  | 'Desserts';
+  | 'Beverages & Dairy'
+  | 'Desserts & Sweets'
+  | 'Eggs & Extras'
+  | 'Meals & Thali'
+  | string;
+
+export type MeasurementType = 'weight' | 'pieces' | 'eggs' | 'cups' | 'servings';
+
+export interface ServingConversion {
+  portionLabel: string;
+  multiplier: number;
+  displayUnit: string;
+}
+
+export type MealSlot = 'morning' | 'afternoon' | 'evening' | 'all_day';
+
+export interface MealSlotTime {
+  name: string;
+  tamilName: string;
+  startTime: string; // "06:30"
+  endTime: string;   // "11:30"
+  enabled: boolean;
+}
+
+export interface MealScheduleSettings {
+  morning: MealSlotTime;
+  afternoon: MealSlotTime;
+  evening: MealSlotTime;
+}
 
 export interface Product {
-  id: string; // PRD-101
+  id: string;
   code: string;
   name: string;
   category: ProductCategory;
+  mealSlot?: MealSlot;
+  imageUrl?: string;
   price: number;
   costPrice: number;
+  unit: string; // 'Plate', 'Cup', 'Piece', 'Glass', 'Bowl', 'Serving'
   isStockTracked: boolean;
   stockQuantity: number;
   minStockThreshold: number;
   isAvailable: boolean;
-  unit: string; // plate, cup, pcs, bottle
   imageEmoji?: string;
   description?: string;
   updatedAt: string;
@@ -61,40 +129,72 @@ export interface Product {
 export interface BillItem {
   productId: string;
   productName: string;
-  category: ProductCategory;
-  unitPrice: number; // Sale-time unit price
+  category: string;
+  unitPrice: number;
   quantity: number;
   total: number;
+  unit?: string;
 }
 
 export type PaymentMethod = 'cash' | 'upi' | 'hostel_credit';
-export type PaymentStatus = 'paid' | 'pending';
-export type BillStatus = 'completed' | 'cancelled' | 'refunded';
+export type PaymentStatus = 'paid' | 'pending' | 'refunded';
 
 export interface Bill {
-  id: string; // BILL-2026-XXXX
-  billNumber: string;
+  id: string;
+  billNumber: string; // e.g. "BILL-2026-0001"
   studentId: string;
   studentName: string;
   studentDepartment: string;
   studentRoom: string;
+  studentBlock?: string;
   cashierId: string;
   cashierName: string;
-  timestamp: string; // ISO 8601
+  timestamp: string;
   items: BillItem[];
   subtotal: number;
   discount: number;
-  tax: number;
+  totalAmount: number;
   total: number;
   paymentMethod: PaymentMethod;
   paymentStatus: PaymentStatus;
-  status: BillStatus;
-  refundReason?: string;
+  status: 'completed' | 'cancelled' | 'refunded';
+  notes?: string;
   cancelledAt?: string;
+  cancelledBy?: string;
+  cancellationReason?: string;
+  refundedAt?: string;
+  refundedBy?: string;
+  refundReason?: string;
+}
+
+export interface Shift {
+  id: string;
+  cashierId: string;
+  cashierName: string;
+  openedAt: string;
+  closedAt?: string;
+  startTime?: string;
+  endTime?: string;
+  status: 'open' | 'closed';
+  openingFloat: number;
+  openingCash?: number;
+  cashInflow: number;
+  cashReceived?: number;
+  upiInflow: number;
+  upiReceived?: number;
+  creditInflow: number;
+  refunds?: number;
+  totalSales: number;
+  billsCount: number;
+  closingCashCounted?: number;
+  actualClosingCash?: number;
+  expectedClosingCash?: number;
+  cashVariance?: number;
+  difference?: number;
   notes?: string;
 }
 
-export type StockMovementType = 'in' | 'out' | 'sale' | 'wastage' | 'adjustment';
+export type StockMovementType = 'in' | 'out' | 'wastage' | 'adjustment' | 'sale';
 
 export interface StockMovement {
   id: string;
@@ -105,32 +205,10 @@ export interface StockMovement {
   previousStock: number;
   newStock: number;
   reason: string;
+  performedBy: string;
+  createdBy?: string;
   timestamp: string;
-  createdBy: string;
 }
-
-export type ShiftStatus = 'open' | 'closed';
-
-export interface Shift {
-  id: string;
-  cashierId: string;
-  cashierName: string;
-  startTime: string;
-  endTime?: string;
-  openingCash: number;
-  cashReceived: number;
-  upiReceived: number;
-  creditReceived: number;
-  refunds: number;
-  expectedClosingCash: number;
-  actualClosingCash?: number;
-  difference?: number;
-  status: ShiftStatus;
-  billsCount: number;
-  notes?: string;
-}
-
-export type AuditEntity = 'bill' | 'student' | 'product' | 'inventory' | 'shift' | 'user' | 'settings' | 'auth';
 
 export interface AuditLog {
   id: string;
@@ -139,33 +217,44 @@ export interface AuditLog {
   userName: string;
   userRole: UserRole;
   action: string;
-  entityType: AuditEntity;
+  entityType: string;
   recordId: string;
   description: string;
-  metadata?: Record<string, any>;
+  reason?: string;
 }
+
+export type CouncilCategory = 'A' | 'B' | 'C' | 'D';
 
 export interface MessSettings {
   messName: string;
   instituteName: string;
-  address: string;
   phone: string;
   email: string;
+  address: string;
+  gstNumber: string;
   gstin?: string;
-  receiptHeader: string;
-  receiptFooter: string;
   currency: string;
   currencySymbol: string;
-  timezone: string;
-  billPrefix: string;
-  allowNegativeStock: boolean;
+  creditAllowed: boolean;
+  maxCreditLimit: number;
+  allowDiscounts: boolean;
   maxDiscountPercent: number;
-  categories: ProductCategory[];
-  paymentMethods: {
+  lowStockAlertThreshold: number;
+  printHeaderNote: string;
+  printFooterNote: string;
+  receiptHeader?: string;
+  receiptFooter?: string;
+  timezone?: string;
+  billPrefix?: string;
+  allowNegativeStock?: boolean;
+  paymentMethods?: {
     cash: boolean;
     upi: boolean;
     hostel_credit: boolean;
+    credit?: boolean;
   };
+  categories: string[];
+  mealSchedule?: MealScheduleSettings;
 }
 
 export interface ToastMessage {
@@ -173,4 +262,18 @@ export interface ToastMessage {
   type: 'success' | 'error' | 'warning' | 'info';
   title: string;
   message?: string;
+}
+
+export interface AppState {
+  users: User[];
+  currentUser: User;
+  students: Student[];
+  products: Product[];
+  bills: Bill[];
+  shifts: Shift[];
+  activeShift?: Shift | null;
+  stockMovements: StockMovement[];
+  auditLogs: AuditLog[];
+  settings: MessSettings;
+  studentPayments: StudentPayment[];
 }

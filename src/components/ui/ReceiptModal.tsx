@@ -7,6 +7,7 @@ import { Printer, X, CheckCircle, AlertCircle, RotateCcw } from 'lucide-react';
 
 interface ReceiptModalProps {
   bill: Bill | null;
+  isOpen?: boolean;
   onClose: () => void;
 }
 
@@ -60,8 +61,8 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ bill, onClose }) => 
             <p className="text-[11px] text-slate-600 font-sans">{state.settings.instituteName}</p>
             <p className="text-[10px] text-slate-500 mt-0.5">{state.settings.address}</p>
             <p className="text-[10px] text-slate-500">Ph: {state.settings.phone}</p>
-            {state.settings.gstin && (
-              <p className="text-[10px] text-slate-500">GSTIN: {state.settings.gstin}</p>
+            {state.settings.gstNumber && (
+              <p className="text-[10px] text-slate-500">GSTIN: {state.settings.gstNumber}</p>
             )}
           </div>
 

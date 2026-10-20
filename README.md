@@ -5,7 +5,7 @@ A high-performance, enterprise-grade React TypeScript web application for hostel
 ## 🚀 Key Features
 
 1. **Ultra-Fast Point of Sale (POS) Billing**
-   - Instant student lookup by ID (`STU-001`), name, room, or optical smart card/barcode scan.
+   - Instant student lookup by ID (`STU-001`), name, or room number.
    - Quick dish selection cards with live inventory availability checks.
    - Dynamic cart calculation with discounts, line totals, and payment modes (UPI / Cash / Hostel Credit).
    - Generates authentic printable thermal tax invoices & receipts.

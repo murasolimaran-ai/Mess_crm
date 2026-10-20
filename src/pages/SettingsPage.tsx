@@ -16,6 +16,10 @@ import {
   CreditCard,
   Plus,
   Trash2,
+  Clock,
+  Sunrise,
+  Sun,
+  Moon,
 } from 'lucide-react';
 
 export const SettingsPage: React.FC = () => {
@@ -33,13 +37,17 @@ export const SettingsPage: React.FC = () => {
   };
 
   const handlePaymentMethodToggle = (method: 'cash' | 'upi' | 'hostel_credit') => {
-    setSettingsForm((prev) => ({
-      ...prev,
-      paymentMethods: {
-        ...prev.paymentMethods,
-        [method]: !prev.paymentMethods[method],
-      },
-    }));
+    setSettingsForm((prev) => {
+      const pm = prev.paymentMethods || { cash: true, upi: true, hostel_credit: true };
+      return {
+        ...prev,
+        paymentMethods: {
+          cash: method === 'cash' ? !pm.cash : pm.cash,
+          upi: method === 'upi' ? !pm.upi : pm.upi,
+          hostel_credit: method === 'hostel_credit' ? !pm.hostel_credit : pm.hostel_credit,
+        },
+      };
+    });
   };
 
   const handleSaveSettings = (e: React.FormEvent) => {
@@ -289,7 +297,7 @@ export const SettingsPage: React.FC = () => {
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
-                  checked={settingsForm.paymentMethods.upi}
+                  checked={settingsForm.paymentMethods?.upi ?? true}
                   onChange={() => handlePaymentMethodToggle('upi')}
                   className="w-4 h-4 text-blue-600 rounded"
                 />
@@ -299,7 +307,7 @@ export const SettingsPage: React.FC = () => {
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
-                  checked={settingsForm.paymentMethods.cash}
+                  checked={settingsForm.paymentMethods?.cash ?? true}
                   onChange={() => handlePaymentMethodToggle('cash')}
                   className="w-4 h-4 text-emerald-600 rounded"
                 />
@@ -309,7 +317,7 @@ export const SettingsPage: React.FC = () => {
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
-                  checked={settingsForm.paymentMethods.hostel_credit}
+                  checked={settingsForm.paymentMethods?.hostel_credit ?? true}
                   onChange={() => handlePaymentMethodToggle('hostel_credit')}
                   className="w-4 h-4 text-amber-600 rounded"
                 />
@@ -354,6 +362,176 @@ export const SettingsPage: React.FC = () => {
                 <Plus className="w-3.5 h-3.5" />
                 <span>Add</span>
               </button>
+            </div>
+          </div>
+        </div>
+
+        {/* 3-Session Meal Schedule Timings */}
+        <div className="bg-white rounded-2xl border border-blue-200 p-6 shadow-xs space-y-4">
+          <div className="flex items-center gap-2 pb-3 border-b border-blue-100">
+            <Clock className="w-5 h-5 text-blue-600" />
+            <div>
+              <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
+                Hostel Mess Meal Schedules &amp; Counter Timings (காலை, மதியம், மாலை உணவு நேரங்கள்)
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Set active hours for each meal service. The POS counter switches automatically to display matching dishes based on real-time clock.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Morning */}
+            <div className="p-4 rounded-xl border border-amber-200 bg-amber-50/50 space-y-2">
+              <div className="flex items-center gap-2">
+                <Sunrise className="w-4 h-4 text-amber-600" />
+                <span className="text-xs font-bold text-amber-950 uppercase">🌅 Morning Breakfast</span>
+              </div>
+              <div className="text-[11px] text-amber-800">காலை உணவு நேரம்</div>
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <div>
+                  <label className="text-[10px] font-semibold text-slate-600">Start Time</label>
+                  <input
+                    type="time"
+                    value={settingsForm.mealSchedule?.morning.startTime || '06:30'}
+                    onChange={(e) =>
+                      setSettingsForm((prev) => ({
+                        ...prev,
+                        mealSchedule: {
+                          ...(prev.mealSchedule || state.settings.mealSchedule!),
+                          morning: {
+                            ...(prev.mealSchedule?.morning || state.settings.mealSchedule!.morning),
+                            startTime: e.target.value,
+                          },
+                        },
+                      }))
+                    }
+                    className="w-full text-xs p-1.5 border border-slate-300 rounded font-mono bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-semibold text-slate-600">End Time</label>
+                  <input
+                    type="time"
+                    value={settingsForm.mealSchedule?.morning.endTime || '11:30'}
+                    onChange={(e) =>
+                      setSettingsForm((prev) => ({
+                        ...prev,
+                        mealSchedule: {
+                          ...(prev.mealSchedule || state.settings.mealSchedule!),
+                          morning: {
+                            ...(prev.mealSchedule?.morning || state.settings.mealSchedule!.morning),
+                            endTime: e.target.value,
+                          },
+                        },
+                      }))
+                    }
+                    className="w-full text-xs p-1.5 border border-slate-300 rounded font-mono bg-white"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Afternoon */}
+            <div className="p-4 rounded-xl border border-blue-200 bg-blue-50/50 space-y-2">
+              <div className="flex items-center gap-2">
+                <Sun className="w-4 h-4 text-blue-600" />
+                <span className="text-xs font-bold text-blue-950 uppercase">☀️ Afternoon Lunch</span>
+              </div>
+              <div className="text-[11px] text-blue-800">மதிய உணவு நேரம்</div>
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <div>
+                  <label className="text-[10px] font-semibold text-slate-600">Start Time</label>
+                  <input
+                    type="time"
+                    value={settingsForm.mealSchedule?.afternoon.startTime || '11:30'}
+                    onChange={(e) =>
+                      setSettingsForm((prev) => ({
+                        ...prev,
+                        mealSchedule: {
+                          ...(prev.mealSchedule || state.settings.mealSchedule!),
+                          afternoon: {
+                            ...(prev.mealSchedule?.afternoon || state.settings.mealSchedule!.afternoon),
+                            startTime: e.target.value,
+                          },
+                        },
+                      }))
+                    }
+                    className="w-full text-xs p-1.5 border border-slate-300 rounded font-mono bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-semibold text-slate-600">End Time</label>
+                  <input
+                    type="time"
+                    value={settingsForm.mealSchedule?.afternoon.endTime || '16:30'}
+                    onChange={(e) =>
+                      setSettingsForm((prev) => ({
+                        ...prev,
+                        mealSchedule: {
+                          ...(prev.mealSchedule || state.settings.mealSchedule!),
+                          afternoon: {
+                            ...(prev.mealSchedule?.afternoon || state.settings.mealSchedule!.afternoon),
+                            endTime: e.target.value,
+                          },
+                        },
+                      }))
+                    }
+                    className="w-full text-xs p-1.5 border border-slate-300 rounded font-mono bg-white"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Evening */}
+            <div className="p-4 rounded-xl border border-purple-200 bg-purple-50/50 space-y-2">
+              <div className="flex items-center gap-2">
+                <Moon className="w-4 h-4 text-purple-600" />
+                <span className="text-xs font-bold text-purple-950 uppercase">🌙 Evening Dinner</span>
+              </div>
+              <div className="text-[11px] text-purple-800">மாலை &amp; இரவு உணவு நேரம்</div>
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <div>
+                  <label className="text-[10px] font-semibold text-slate-600">Start Time</label>
+                  <input
+                    type="time"
+                    value={settingsForm.mealSchedule?.evening.startTime || '16:30'}
+                    onChange={(e) =>
+                      setSettingsForm((prev) => ({
+                        ...prev,
+                        mealSchedule: {
+                          ...(prev.mealSchedule || state.settings.mealSchedule!),
+                          evening: {
+                            ...(prev.mealSchedule?.evening || state.settings.mealSchedule!.evening),
+                            startTime: e.target.value,
+                          },
+                        },
+                      }))
+                    }
+                    className="w-full text-xs p-1.5 border border-slate-300 rounded font-mono bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-semibold text-slate-600">End Time</label>
+                  <input
+                    type="time"
+                    value={settingsForm.mealSchedule?.evening.endTime || '22:30'}
+                    onChange={(e) =>
+                      setSettingsForm((prev) => ({
+                        ...prev,
+                        mealSchedule: {
+                          ...(prev.mealSchedule || state.settings.mealSchedule!),
+                          evening: {
+                            ...(prev.mealSchedule?.evening || state.settings.mealSchedule!.evening),
+                            endTime: e.target.value,
+                          },
+                        },
+                      }))
+                    }
+                    className="w-full text-xs p-1.5 border border-slate-300 rounded font-mono bg-white"
+                  />
+                </div>
+              </div>
             </div>
           </div>
         </div>

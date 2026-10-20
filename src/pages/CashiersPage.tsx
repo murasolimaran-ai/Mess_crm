@@ -101,7 +101,7 @@ export const CashiersPage: React.FC = () => {
             <button
               onClick={() => {
                 setClosingShiftTarget(myOpenShift);
-                setActualCashCount(myOpenShift.expectedClosingCash);
+                setActualCashCount(myOpenShift.expectedClosingCash || 0);
                 setCloseNotes('');
               }}
               className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-semibold text-white bg-amber-600 rounded-xl hover:bg-amber-700 transition-colors shadow-xs"
@@ -154,7 +154,7 @@ export const CashiersPage: React.FC = () => {
               <button
                 onClick={() => {
                   setClosingShiftTarget(myOpenShift);
-                  setActualCashCount(myOpenShift.expectedClosingCash);
+                  setActualCashCount(myOpenShift.expectedClosingCash || 0);
                   setCloseNotes('');
                 }}
                 className="px-4 py-2 bg-white text-blue-950 font-bold rounded-xl text-xs hover:bg-blue-50 transition-colors shadow-xs"
@@ -190,7 +190,17 @@ export const CashiersPage: React.FC = () => {
                     </div>
                     <div>
                       <h3 className="font-bold text-slate-900 text-xs">{cashier.name}</h3>
-                      <p className="text-[11px] text-slate-500 font-mono">{cashier.username} &middot; {cashier.phone}</p>
+                      <p className="text-[11px] text-slate-500 font-mono">
+                        <span className="font-semibold text-slate-700">{cashier.id}</span> &middot; @{cashier.username}
+                      </p>
+                      <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                          {cashier.designation || "Men's Mess Cashier"}
+                        </span>
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600">
+                          {cashier.category || "Men's Mess"}
+                        </span>
+                      </div>
                       <div className="mt-2 text-xs">
                         {openShift ? (
                           <span className="text-emerald-700 font-semibold flex items-center gap-1">
@@ -290,7 +300,7 @@ export const CashiersPage: React.FC = () => {
                       <button
                         onClick={() => {
                           setClosingShiftTarget(sh);
-                          setActualCashCount(sh.expectedClosingCash);
+                          setActualCashCount(sh.expectedClosingCash || 0);
                           setCloseNotes('');
                         }}
                         className="px-2.5 py-1 text-xs font-semibold text-amber-800 bg-amber-100 hover:bg-amber-200 rounded-lg transition-colors"
@@ -427,12 +437,12 @@ export const CashiersPage: React.FC = () => {
                   <span>Drawer Discrepancy / Variance:</span>
                   <span
                     className={
-                      actualCashCount - closingShiftTarget.expectedClosingCash === 0
+                      actualCashCount - (closingShiftTarget.expectedClosingCash || 0) === 0
                         ? 'text-emerald-700'
                         : 'text-rose-700'
                     }
                   >
-                    {formatINR(actualCashCount - closingShiftTarget.expectedClosingCash)}
+                    {formatINR(actualCashCount - (closingShiftTarget.expectedClosingCash || 0))}
                   </span>
                 </div>
               </div>

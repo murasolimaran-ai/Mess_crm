@@ -1,12 +1,18 @@
 import React, { useState } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, Navigate } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
 import { ToastContainer } from '../ui/Toast';
+import { useMess } from '../../store/MessContext';
 
 export const AppLayout: React.FC = () => {
+  const { isLoggedIn } = useMess();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  if (!isLoggedIn) {
+    return <Navigate to="/login" replace />;
+  }
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex flex-col antialiased">

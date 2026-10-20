@@ -11,64 +11,81 @@ import {
   BillItem,
   PaymentMethod,
   PaymentStatus,
-  ToastMessage,
   StockMovementType,
+  StudentStatus,
+  ToastMessage,
+  AppState,
+  StudentPayment,
+  MealScheduleSettings,
 } from '../types';
 import {
-  AppState,
   initialAppState,
   saveStateToStorage,
   resetStateToInitial,
 } from './demoStore';
 
-interface CreateBillParams {
-  studentId: string;
-  items: Array<{ productId: string; quantity: number }>;
-  paymentMethod: PaymentMethod;
-  paymentStatus: PaymentStatus;
-  discount?: number;
-  notes?: string;
-}
-
-interface BulkImportResult {
-  success: number;
-  failed: number;
-  duplicates: number;
-  errors: string[];
-}
-
 interface MessContextType {
   state: AppState;
   currentUser: User;
+  currentStudent: Student | null;
   toasts: ToastMessage[];
   addToast: (type: ToastMessage['type'], title: string, message?: string) => void;
   dismissToast: (id: string) => void;
-  login: (username: string, role?: string) => boolean;
+  login: (username: string, password?: string) => boolean;
+  loginUser: (username: string) => boolean;
   logout: () => void;
-  // Billing
-  createBill: (params: CreateBillParams) => { success: boolean; bill?: Bill; error?: string };
+  resetDemoData: () => void;
+
+  // Student Self-Service Portal
+  loginStudent: (studentId: string, passwordOrPhone: string) => { success: boolean; error?: string; student?: Student };
+  activateStudentAccount: (studentId: string, newPassword?: string) => { success: boolean; error?: string; student?: Student; defaultPassword?: string };
+  payStudentDue: (
+    studentId: string,
+    amount: number,
+    paymentMethod: 'upi' | 'card' | 'netbanking' | 'qr',
+    transactionRef?: string
+  ) => { success: boolean; error?: string; paymentRecord?: StudentPayment };
+
+  // POS / Bills
+  createBill: (params: {
+    studentId: string;
+    items: { product: Product; quantity: number }[];
+    paymentMethod: PaymentMethod;
+    paymentStatus: PaymentStatus;
+    discount?: number;
+    notes?: string;
+  }) => { success: boolean; bill?: Bill; error?: string };
   cancelBill: (billId: string, reason: string) => { success: boolean; error?: string };
   refundBill: (billId: string, reason: string) => { success: boolean; error?: string };
+
   // Students
-  addStudent: (student: Omit<Student, 'monthlySpending' | 'totalSpending' | 'billsCount' | 'createdAt'>) => { success: boolean; error?: string };
+  addStudent: (student: Omit<Student, 'createdAt' | 'billsCount' | 'monthlySpending' | 'totalSpending' | 'pendingBalance' | 'balance'>) => { success: boolean; error?: string };
   updateStudent: (id: string, updates: Partial<Student>) => { success: boolean; error?: string };
-  toggleStudentStatus: (id: string) => void;
-  bulkImportStudents: (students: Partial<Student>[]) => BulkImportResult;
-  // Products
-  addProduct: (product: Omit<Product, 'id' | 'updatedAt'>) => { success: boolean; product?: Product; error?: string };
+  toggleStudentStatus: (id: string) => { success: boolean };
+  bulkImportStudents: (importedList: Partial<Student>[]) => { success: number; failed: number; duplicates: number; errors: string[] };
+
+  // Products & Menu
+  addProduct: (product: Omit<Product, 'id' | 'updatedAt'>) => { success: boolean; error?: string };
   updateProduct: (id: string, updates: Partial<Product>) => { success: boolean; error?: string };
-  toggleProductAvailability: (id: string) => void;
-  // Inventory
+  updateProductPrice: (productId: string, newPrice: number, reason: string) => { success: boolean };
+  toggleProductAvailability: (productId: string) => { success: boolean };
   adjustStock: (productId: string, type: StockMovementType, quantity: number, reason: string) => { success: boolean; error?: string };
+
   // Shifts
-  startShift: (openingCash: number) => { success: boolean; shift?: Shift; error?: string };
-  closeShift: (shiftId: string, actualClosingCash: number, notes?: string) => { success: boolean; error?: string };
-  // Settings & Users
-  updateSettings: (settings: MessSettings) => void;
-  addUser: (user: Omit<User, 'id' | 'lastLogin'>) => { success: boolean; error?: string };
-  updateUser: (id: string, updates: Partial<User>) => void;
-  toggleUserStatus: (id: string) => void;
-  resetDemoData: () => void;
+  startShift: (openingFloat: number, notes?: string) => { success: boolean; shift?: Shift; error?: string };
+  closeShift: (shiftId: string, closingCashCounted: number, notes?: string) => { success: boolean; shift?: Shift; error?: string };
+
+  // Users
+  addUser: (user: (Omit<User, 'id' | 'lastLogin'> & { id?: string }) | (Omit<User, 'lastLogin'>)) => { success: boolean; error?: string; user?: User };
+  updateUser: (id: string, updates: Partial<User>) => { success: boolean; error?: string };
+  toggleUserStatus: (id: string) => { success: boolean };
+
+  // Auth & Session
+  isLoggedIn: boolean;
+
+  // Settings & Meal Schedule
+  updateSettings: (updates: Partial<MessSettings>) => { success: boolean };
+  updateMealSchedule: (schedule: MealScheduleSettings) => void;
 }
 
 const MessContext = createContext<MessContextType | undefined>(undefined);
@@ -76,8 +93,8 @@ const MessContext = createContext<MessContextType | undefined>(undefined);
 export const MessProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [state, setState] = useState<AppState>(initialAppState);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(true);
 
-  // Keep state synced with localStorage
   useEffect(() => {
     saveStateToStorage(state);
   }, [state]);
@@ -87,7 +104,7 @@ export const MessProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setToasts((prev) => [...prev, { id, type, title, message }]);
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 4500);
+    }, 4000);
   }, []);
 
   const dismissToast = useCallback((id: string) => {
@@ -95,14 +112,8 @@ export const MessProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const logAudit = useCallback(
-    (
-      action: string,
-      entityType: AuditLog['entityType'],
-      recordId: string,
-      description: string,
-      metadata?: Record<string, any>
-    ) => {
-      const newLog: AuditLog = {
+    (action: string, entityType: string, recordId: string, description: string, reason?: string): AuditLog => {
+      return {
         id: `AUD-${Date.now()}-${Math.floor(Math.random() * 900 + 100)}`,
         timestamp: new Date().toISOString(),
         userId: state.currentUser.id,
@@ -112,397 +123,559 @@ export const MessProvider: React.FC<{ children: React.ReactNode }> = ({ children
         entityType,
         recordId,
         description,
-        metadata,
+        reason,
       };
-      return newLog;
     },
     [state.currentUser]
   );
 
   const login = useCallback(
-    (username: string): boolean => {
-      const found = state.users.find((u) => u.username.toLowerCase() === username.toLowerCase());
-      if (found && found.active) {
-        const updatedUser = {
-          ...found,
-          lastLogin: new Date().toISOString(),
-        };
-        setState((prev) => ({
-          ...prev,
-          currentUser: updatedUser,
-          users: prev.users.map((u) => (u.id === found.id ? updatedUser : u)),
-        }));
-        addToast('success', 'Logged in successfully', `Welcome back, ${found.name}!`);
-        return true;
+    (usernameOrId: string): boolean => {
+      const q = usernameOrId.trim().toLowerCase();
+      const user = state.users.find(
+        (u) => (u.username.toLowerCase() === q || u.id.toLowerCase() === q) && u.active
+      );
+      if (!user) {
+        addToast('error', 'Login Failed', 'Invalid username/ID or inactive user account.');
+        return false;
       }
-      return false;
+
+      const updatedUser = { ...user, lastLogin: new Date().toISOString() };
+      setState((prev) => ({
+        ...prev,
+        currentUser: updatedUser,
+        users: prev.users.map((u) => (u.id === user.id ? updatedUser : u)),
+      }));
+
+      setIsLoggedIn(true);
+      addToast('success', `Welcome back, ${user.name}`, `Logged in as ${user.role.toUpperCase()}`);
+      return true;
     },
     [state.users, addToast]
   );
 
-  const logout = useCallback(() => {
-    const adminUser = state.users.find((u) => u.role === 'admin') || state.users[0];
-    setState((prev) => ({
-      ...prev,
-      currentUser: adminUser,
-    }));
-    addToast('info', 'Logged out', 'Switched to guest state. Please log in.');
-  }, [state.users, addToast]);
+  const loginUser = useCallback(
+    (username: string): boolean => {
+      return login(username);
+    },
+    [login]
+  );
 
-  // Billing Flow
+  const logout = useCallback(() => {
+    setIsLoggedIn(false);
+    addToast('info', 'Logged Out', 'Session terminated. Returned to login page.');
+  }, [addToast]);
+
+  const updateMealSchedule = useCallback(
+    (schedule: MealScheduleSettings) => {
+      setState((prev) => ({
+        ...prev,
+        settings: {
+          ...prev.settings,
+          mealSchedule: schedule,
+        },
+      }));
+      addToast('success', 'Meal Schedule Updated', 'Active slot timings synchronized with all POS counters.');
+    },
+    [addToast]
+  );
+
+  const resetDemoData = useCallback(() => {
+    const fresh = resetStateToInitial();
+    setState(fresh);
+    addToast('success', 'Demo Reset', 'System re-seeded with initial 500 students and catalog items.');
+  }, [addToast]);
+
+  // Current Student reference if logged-in user is a student
+  const currentStudent = React.useMemo(() => {
+    if (state.currentUser.role === 'student') {
+      return state.students.find((s) => s.id.toLowerCase() === state.currentUser.id.toLowerCase()) || null;
+    }
+    return null;
+  }, [state.currentUser, state.students]);
+
+  // Student Portal Auth (Student ID + default password: Mobile Number)
+  const loginStudent = useCallback(
+    (studentIdInput: string, passwordOrPhoneInput: string) => {
+      const sId = studentIdInput.trim().toUpperCase();
+      const student = state.students.find((s) => s.id.toUpperCase() === sId);
+
+      if (!student) {
+        return { success: false, error: `Student ID "${studentIdInput}" was not found in the mess roster.` };
+      }
+
+      if (student.status !== 'active') {
+        return {
+          success: false,
+          error: `Student status is ${student.status.toUpperCase()}. Account cannot access the dining portal. Please contact the Mess Warden.`,
+        };
+      }
+
+      const inputPass = passwordOrPhoneInput.trim();
+      const cleanInputDigits = inputPass.replace(/\D/g, '');
+      const cleanPhoneDigits = student.phone.replace(/\D/g, '');
+
+      // Check registered mobile number (full or 10 digits) OR custom password
+      const isPhoneMatch =
+        inputPass === student.phone ||
+        (cleanInputDigits.length >= 6 && cleanPhoneDigits.endsWith(cleanInputDigits));
+      const isCustomPassMatch = Boolean(student.password && student.password === inputPass);
+
+      if (!isPhoneMatch && !isCustomPassMatch) {
+        return {
+          success: false,
+          error: `Incorrect security key/password. For new students, your default password is your registered mobile number (${student.phone.slice(-4).padStart(10, '*')}).`,
+        };
+      }
+
+      const studentUser: User = {
+        id: student.id,
+        username: student.id.toLowerCase(),
+        name: student.name,
+        role: 'student',
+        category: student.category || "Men's Mess",
+        email: student.email,
+        phone: student.phone,
+        active: true,
+        lastLogin: new Date().toISOString(),
+        permissions: ['student.view', 'student.pay'],
+      };
+
+      setState((prev) => ({
+        ...prev,
+        currentUser: studentUser,
+      }));
+
+      setIsLoggedIn(true);
+      addToast('success', `Welcome, ${student.name}`, `Signed in to Student Mess Self-Service Portal (${student.id})`);
+      return { success: true, student };
+    },
+    [state.students, addToast]
+  );
+
+  const activateStudentAccount = useCallback(
+    (studentIdInput: string, newPassword?: string) => {
+      const sId = studentIdInput.trim().toUpperCase();
+      const student = state.students.find((s) => s.id.toUpperCase() === sId);
+
+      if (!student) {
+        return { success: false, error: `Student ID "${studentIdInput}" is not enrolled in the mess roster.` };
+      }
+
+      const defaultPassword = newPassword && newPassword.trim() ? newPassword.trim() : student.phone;
+
+      const updatedStudent: Student = {
+        ...student,
+        password: defaultPassword,
+        isFirstLoginDone: true,
+      };
+
+      const studentUser: User = {
+        id: student.id,
+        username: student.id.toLowerCase(),
+        name: student.name,
+        role: 'student',
+        category: student.category || "Men's Mess",
+        email: student.email,
+        phone: student.phone,
+        active: true,
+        lastLogin: new Date().toISOString(),
+        permissions: ['student.view', 'student.pay'],
+      };
+
+      const audit = logAudit(
+        'STUDENT_PORTAL_ACTIVATION',
+        'Student',
+        student.id,
+        `Student ${student.name} (${student.id}) activated their self-service portal account.`
+      );
+
+      setState((prev) => ({
+        ...prev,
+        students: prev.students.map((s) => (s.id === student.id ? updatedStudent : s)),
+        currentUser: studentUser,
+        auditLogs: [audit, ...prev.auditLogs],
+      }));
+
+      setIsLoggedIn(true);
+      addToast('success', 'Portal Activated!', `Welcome ${student.name}. Your default login key is ${student.phone}`);
+      return { success: true, student: updatedStudent, defaultPassword };
+    },
+    [state.students, logAudit, addToast]
+  );
+
+  const payStudentDue = useCallback(
+    (
+      studentId: string,
+      amount: number,
+      paymentMethod: 'upi' | 'card' | 'netbanking' | 'qr',
+      transactionRef?: string
+    ) => {
+      const student = state.students.find((s) => s.id === studentId);
+      if (!student) {
+        return { success: false, error: 'Student not found in mess roster.' };
+      }
+
+      if (amount <= 0) {
+        return { success: false, error: 'Payment amount must be greater than zero.' };
+      }
+
+      const prevBal = student.pendingBalance;
+      const newPending = Math.max(0, prevBal - amount);
+      const paySeq = (state.studentPayments?.length || 0) + 1;
+      const payNumber = `PAY-2026-${String(paySeq).padStart(4, '0')}`;
+      const txnRef = transactionRef || `TXN-UPI-${Date.now().toString().slice(-6)}`;
+
+      const paymentRecord: StudentPayment = {
+        id: `pay-${Date.now()}`,
+        paymentNumber: payNumber,
+        studentId: student.id,
+        studentName: student.name,
+        amount,
+        paymentMethod,
+        transactionRef: txnRef,
+        timestamp: new Date().toISOString(),
+        previousBalance: prevBal,
+        remainingBalance: newPending,
+        status: 'success',
+        notes: `Online student self-service payment via ${paymentMethod.toUpperCase()}`,
+      };
+
+      const audit = logAudit(
+        'STUDENT_PAYMENT',
+        'Student',
+        student.id,
+        `Student ${student.name} (${student.id}) paid ₹${amount} via ${paymentMethod.toUpperCase()} (Ref: ${txnRef}). Remaining due: ₹${newPending}`
+      );
+
+      setState((prev) => ({
+        ...prev,
+        students: prev.students.map((s) =>
+          s.id === student.id ? { ...s, pendingBalance: newPending, balance: newPending } : s
+        ),
+        studentPayments: [paymentRecord, ...(prev.studentPayments || [])],
+        auditLogs: [audit, ...prev.auditLogs],
+      }));
+
+      addToast(
+        'success',
+        'Payment Credited!',
+        `Receipt ${payNumber}: ₹${amount.toFixed(2)} received. Outstanding due is now ₹${newPending.toFixed(2)}.`
+      );
+
+      return { success: true, paymentRecord };
+    },
+    [state.students, state.studentPayments, logAudit, addToast]
+  );
+
+  // Create Bill
   const createBill = useCallback(
-    (params: CreateBillParams) => {
+    (params: {
+      studentId: string;
+      items: { product: Product; quantity: number }[];
+      paymentMethod: PaymentMethod;
+      paymentStatus: PaymentStatus;
+      discount?: number;
+      notes?: string;
+    }) => {
       const student = state.students.find((s) => s.id === params.studentId);
       if (!student) {
         return { success: false, error: 'Selected student does not exist.' };
       }
       if (student.status !== 'active') {
-        return {
-          success: false,
-          error: `Student status is ${student.status.toUpperCase()}. Inactive students cannot be billed.`,
-        };
+        return { success: false, error: `Student is currently marked as ${student.status.toUpperCase()} and cannot make purchases.` };
       }
       if (!params.items || params.items.length === 0) {
-        return { success: false, error: 'Cannot create an empty bill. Add at least one item.' };
+        return { success: false, error: 'Please add at least one food item to the bill.' };
       }
 
-      // Check stock tracking and deduct
-      const billItems: BillItem[] = [];
-      const stockUpdates: { [productId: string]: number } = {};
-      const newStockMovements: StockMovement[] = [];
-      let subtotal = 0;
-
+      // Check stock for tracked products
       for (const item of params.items) {
-        const prod = state.products.find((p) => p.id === item.productId);
-        if (!prod) {
-          return { success: false, error: `Product ID ${item.productId} was not found.` };
+        const prod = state.products.find((p) => p.id === item.product.id);
+        if (prod && prod.isStockTracked && prod.stockQuantity < item.quantity) {
+          return {
+            success: false,
+            error: `Insufficient stock for ${prod.name}. Available: ${prod.stockQuantity}, Requested: ${item.quantity}`,
+          };
         }
-        if (!prod.isAvailable) {
-          return { success: false, error: `${prod.name} is currently marked as unavailable.` };
-        }
-
-        if (prod.isStockTracked) {
-          const currentStock = stockUpdates[prod.id] !== undefined ? stockUpdates[prod.id] : prod.stockQuantity;
-          if (!state.settings.allowNegativeStock && currentStock < item.quantity) {
-            return {
-              success: false,
-              error: `Insufficient stock for ${prod.name}. Available: ${currentStock}, Requested: ${item.quantity}.`,
-            };
-          }
-          const updatedQty = currentStock - item.quantity;
-          stockUpdates[prod.id] = updatedQty;
-
-          newStockMovements.push({
-            id: `SM-SALE-${Date.now()}-${item.productId}`,
-            productId: prod.id,
-            productName: prod.name,
-            type: 'sale',
-            quantity: item.quantity,
-            previousStock: currentStock,
-            newStock: updatedQty,
-            reason: `Bill sale deduction for ${student.id} (${student.name})`,
-            timestamp: new Date().toISOString(),
-            createdBy: state.currentUser.name,
-          });
-        }
-
-        const lineTotal = prod.price * item.quantity;
-        subtotal += lineTotal;
-        billItems.push({
-          productId: prod.id,
-          productName: prod.name,
-          category: prod.category,
-          unitPrice: prod.price, // Freeze sale-time price!
-          quantity: item.quantity,
-          total: lineTotal,
-        });
       }
 
-      const discount = Math.max(0, Number(params.discount) || 0);
-      const total = Math.max(0, subtotal - discount);
+      const billItems: BillItem[] = params.items.map((it) => ({
+        productId: it.product.id,
+        productName: it.product.name,
+        category: String(it.product.category),
+        unitPrice: it.product.price,
+        quantity: it.quantity,
+        total: it.product.price * it.quantity,
+        unit: it.product.unit,
+      }));
 
-      // Unique bill ID
-      const timestamp = new Date().toISOString();
-      const randomSuffix = Math.floor(1000 + Math.random() * 9000);
-      const billNumber = `${state.settings.billPrefix}${randomSuffix}`;
+      const subtotal = billItems.reduce((acc, it) => acc + it.total, 0);
+      const discount = Math.min(params.discount || 0, subtotal);
+      const totalAmount = Math.max(0, subtotal - discount);
 
+      // Check credit limit if paying via hostel_credit
+      if (params.paymentMethod === 'hostel_credit') {
+        const potentialPending = student.pendingBalance + totalAmount;
+        if (potentialPending > student.creditLimit) {
+          return {
+            success: false,
+            error: `Credit limit exceeded! Student credit limit is ₹${student.creditLimit}, current pending is ₹${student.pendingBalance}. Adding ₹${totalAmount} would exceed limit.`,
+          };
+        }
+      }
+
+      const billSeq = state.bills.length + 1;
+      const billNumber = `BILL-2026-${String(billSeq).padStart(4, '0')}`;
       const newBill: Bill = {
-        id: billNumber,
+        id: `bill-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
         billNumber,
         studentId: student.id,
         studentName: student.name,
         studentDepartment: student.department,
         studentRoom: student.roomNumber,
+        studentBlock: student.hostelBlock,
         cashierId: state.currentUser.id,
         cashierName: state.currentUser.name,
-        timestamp,
+        timestamp: new Date().toISOString(),
         items: billItems,
         subtotal,
         discount,
-        tax: 0,
-        total,
+        totalAmount,
+        total: totalAmount,
         paymentMethod: params.paymentMethod,
         paymentStatus: params.paymentStatus,
         status: 'completed',
         notes: params.notes,
       };
 
-      const audit = logAudit(
-        'CREATE_BILL',
-        'bill',
-        billNumber,
-        `Generated bill ${billNumber} for ${student.name} (${student.id}) total: ₹${total.toFixed(2)} via ${params.paymentMethod.toUpperCase()}`,
-        { total, itemsCount: billItems.length, paymentMethod: params.paymentMethod }
-      );
-
-      setState((prev) => {
-        // Update product stock
-        const updatedProducts = prev.products.map((p) => {
-          if (stockUpdates[p.id] !== undefined) {
-            return {
-              ...p,
-              stockQuantity: stockUpdates[p.id],
-              updatedAt: timestamp,
-            };
-          }
-          return p;
-        });
-
-        // Update student spending
-        const updatedStudents = prev.students.map((s) => {
-          if (s.id === student.id) {
-            return {
-              ...s,
-              totalSpending: s.totalSpending + total,
-              monthlySpending: s.monthlySpending + total,
-              billsCount: s.billsCount + 1,
-            };
-          }
-          return s;
-        });
-
-        // Update shift for current cashier if open
-        const updatedShifts = prev.shifts.map((sh) => {
-          if (sh.cashierId === prev.currentUser.id && sh.status === 'open') {
-            const isCash = params.paymentMethod === 'cash';
-            const isUpi = params.paymentMethod === 'upi';
-            const isCredit = params.paymentMethod === 'hostel_credit';
-            return {
-              ...sh,
-              cashReceived: sh.cashReceived + (isCash ? total : 0),
-              upiReceived: sh.upiReceived + (isUpi ? total : 0),
-              creditReceived: sh.creditReceived + (isCredit ? total : 0),
-              expectedClosingCash: sh.expectedClosingCash + (isCash ? total : 0),
-              billsCount: sh.billsCount + 1,
-            };
-          }
-          return sh;
-        });
-
-        return {
-          ...prev,
-          bills: [newBill, ...prev.bills],
-          products: updatedProducts,
-          students: updatedStudents,
-          shifts: updatedShifts,
-          stockMovements: [...newStockMovements, ...prev.stockMovements],
-          auditLogs: [audit, ...prev.auditLogs],
-        };
+      // Deduct stock
+      const updatedProducts = state.products.map((p) => {
+        const billedItem = billItems.find((it) => it.productId === p.id);
+        if (billedItem && p.isStockTracked) {
+          return {
+            ...p,
+            stockQuantity: Math.max(0, p.stockQuantity - billedItem.quantity),
+            updatedAt: new Date().toISOString(),
+          };
+        }
+        return p;
       });
 
-      addToast('success', 'Bill Created Successfully', `Bill #${billNumber} for ₹${total.toFixed(2)} generated.`);
+      // Update student spending & balance
+      const updatedStudents = state.students.map((s) => {
+        if (s.id === student.id) {
+          const addedPending = params.paymentStatus === 'pending' || params.paymentMethod === 'hostel_credit' ? totalAmount : 0;
+          const nextPending = s.pendingBalance + addedPending;
+          return {
+            ...s,
+            monthlySpending: s.monthlySpending + totalAmount,
+            totalSpending: s.totalSpending + totalAmount,
+            pendingBalance: nextPending,
+            balance: nextPending,
+            billsCount: (s.billsCount || 0) + 1,
+          };
+        }
+        return s;
+      });
+
+      // Update active shift if any
+      let updatedShifts = [...state.shifts];
+      let updatedActiveShift = state.activeShift;
+
+      if (state.activeShift && state.activeShift.status === 'open') {
+        const cashInflow = params.paymentMethod === 'cash' ? totalAmount : 0;
+        const upiInflow = params.paymentMethod === 'upi' ? totalAmount : 0;
+        const creditInflow = params.paymentMethod === 'hostel_credit' ? totalAmount : 0;
+
+        const nextShift: Shift = {
+          ...state.activeShift,
+          cashInflow: state.activeShift.cashInflow + cashInflow,
+          cashReceived: (state.activeShift.cashReceived || 0) + cashInflow,
+          upiInflow: state.activeShift.upiInflow + upiInflow,
+          upiReceived: (state.activeShift.upiReceived || 0) + upiInflow,
+          creditInflow: state.activeShift.creditInflow + creditInflow,
+          totalSales: state.activeShift.totalSales + totalAmount,
+          billsCount: state.activeShift.billsCount + 1,
+        };
+
+        updatedActiveShift = nextShift;
+        updatedShifts = updatedShifts.map((sh) => (sh.id === nextShift.id ? nextShift : sh));
+      }
+
+      const audit = logAudit(
+        'BILL_CREATE',
+        'Bill',
+        newBill.billNumber,
+        `Bill ${newBill.billNumber} created for ${student.name} (${student.id}) total ₹${totalAmount} via ${params.paymentMethod.toUpperCase()}`
+      );
+
+      setState((prev) => ({
+        ...prev,
+        bills: [newBill, ...prev.bills],
+        products: updatedProducts,
+        students: updatedStudents,
+        shifts: updatedShifts,
+        activeShift: updatedActiveShift,
+        auditLogs: [audit, ...prev.auditLogs],
+      }));
+
+      addToast('success', `Bill ${newBill.billNumber} Generated`, `₹${totalAmount.toFixed(2)} charged to ${student.name}`);
       return { success: true, bill: newBill };
     },
-    [state, logAudit, addToast]
+    [state.students, state.products, state.bills, state.currentUser, state.shifts, state.activeShift, logAudit, addToast]
   );
 
-  // Cancel bill
+  // Cancel Bill
   const cancelBill = useCallback(
     (billId: string, reason: string) => {
       const bill = state.bills.find((b) => b.id === billId || b.billNumber === billId);
-      if (!bill) return { success: false, error: 'Bill not found' };
+      if (!bill) return { success: false, error: 'Bill not found.' };
       if (bill.status !== 'completed') {
-        return { success: false, error: `Bill is already marked as ${bill.status.toUpperCase()}` };
-      }
-      if (!reason || reason.trim().length === 0) {
-        return { success: false, error: 'A cancellation reason is required for compliance.' };
+        return { success: false, error: `Bill is already ${bill.status}.` };
       }
 
-      const timestamp = new Date().toISOString();
+      // Restore inventory
+      const updatedProducts = state.products.map((p) => {
+        const bi = bill.items.find((it) => it.productId === p.id);
+        if (bi && p.isStockTracked) {
+          return {
+            ...p,
+            stockQuantity: p.stockQuantity + bi.quantity,
+            updatedAt: new Date().toISOString(),
+          };
+        }
+        return p;
+      });
+
+      // Restore student spending
+      const updatedStudents = state.students.map((s) => {
+        if (s.id === bill.studentId) {
+          const pendingDeduction = bill.paymentStatus === 'pending' || bill.paymentMethod === 'hostel_credit' ? bill.totalAmount : 0;
+          const nextPending = Math.max(0, s.pendingBalance - pendingDeduction);
+          return {
+            ...s,
+            monthlySpending: Math.max(0, s.monthlySpending - bill.totalAmount),
+            totalSpending: Math.max(0, s.totalSpending - bill.totalAmount),
+            pendingBalance: nextPending,
+            balance: nextPending,
+          };
+        }
+        return s;
+      });
+
+      const updatedBill: Bill = {
+        ...bill,
+        status: 'cancelled',
+        cancelledAt: new Date().toISOString(),
+        cancelledBy: state.currentUser.name,
+        cancellationReason: reason,
+      };
+
       const audit = logAudit(
-        'CANCEL_BILL',
-        'bill',
+        'BILL_CANCEL',
+        'Bill',
         bill.billNumber,
-        `Cancelled bill ${bill.billNumber} for ${bill.studentName}. Reason: ${reason}`
+        `Bill ${bill.billNumber} cancelled by ${state.currentUser.name}. Reason: ${reason}`
       );
 
-      // Restore stock for tracked items
-      const restorations: StockMovement[] = [];
-      const stockRestores: { [id: string]: number } = {};
+      setState((prev) => ({
+        ...prev,
+        bills: prev.bills.map((b) => (b.id === bill.id ? updatedBill : b)),
+        products: updatedProducts,
+        students: updatedStudents,
+        auditLogs: [audit, ...prev.auditLogs],
+      }));
 
-      bill.items.forEach((item) => {
-        const prod = state.products.find((p) => p.id === item.productId);
-        if (prod && prod.isStockTracked) {
-          stockRestores[prod.id] = (stockRestores[prod.id] || prod.stockQuantity) + item.quantity;
-          restorations.push({
-            id: `SM-CANCEL-${Date.now()}-${item.productId}`,
-            productId: prod.id,
-            productName: prod.name,
-            type: 'in',
-            quantity: item.quantity,
-            previousStock: prod.stockQuantity,
-            newStock: prod.stockQuantity + item.quantity,
-            reason: `Restoration from cancelled bill ${bill.billNumber}`,
-            timestamp,
-            createdBy: state.currentUser.name,
-          });
-        }
-      });
-
-      setState((prev) => {
-        const updatedBills = prev.bills.map((b) => {
-          if (b.id === bill.id) {
-            return {
-              ...b,
-              status: 'cancelled' as const,
-              refundReason: reason,
-              cancelledAt: timestamp,
-            };
-          }
-          return b;
-        });
-
-        const updatedProducts = prev.products.map((p) => {
-          if (stockRestores[p.id] !== undefined) {
-            return { ...p, stockQuantity: stockRestores[p.id], updatedAt: timestamp };
-          }
-          return p;
-        });
-
-        // Deduct from student totals
-        const updatedStudents = prev.students.map((s) => {
-          if (s.id === bill.studentId) {
-            return {
-              ...s,
-              totalSpending: Math.max(0, s.totalSpending - bill.total),
-              monthlySpending: Math.max(0, s.monthlySpending - bill.total),
-              billsCount: Math.max(0, s.billsCount - 1),
-            };
-          }
-          return s;
-        });
-
-        return {
-          ...prev,
-          bills: updatedBills,
-          products: updatedProducts,
-          students: updatedStudents,
-          stockMovements: [...restorations, ...prev.stockMovements],
-          auditLogs: [audit, ...prev.auditLogs],
-        };
-      });
-
-      addToast('info', 'Bill Cancelled', `Bill ${bill.billNumber} cancelled and inventory restored.`);
+      addToast('warning', `Bill ${bill.billNumber} Cancelled`, 'Stock and student totals reverted.');
       return { success: true };
     },
-    [state, logAudit, addToast]
+    [state.bills, state.products, state.students, state.currentUser, logAudit, addToast]
   );
 
-  // Refund bill
+  // Refund Bill
   const refundBill = useCallback(
     (billId: string, reason: string) => {
       const bill = state.bills.find((b) => b.id === billId || b.billNumber === billId);
-      if (!bill) return { success: false, error: 'Bill not found' };
+      if (!bill) return { success: false, error: 'Bill not found.' };
       if (bill.status !== 'completed') {
-        return { success: false, error: `Bill is already marked as ${bill.status.toUpperCase()}` };
-      }
-      if (!reason || reason.trim().length === 0) {
-        return { success: false, error: 'A mandatory refund reason is required.' };
+        return { success: false, error: `Cannot refund bill with status ${bill.status}.` };
       }
 
-      const timestamp = new Date().toISOString();
-      const audit = logAudit(
-        'REFUND_BILL',
-        'bill',
-        bill.billNumber,
-        `Refunded bill ${bill.billNumber} of ₹${bill.total.toFixed(2)}. Reason: ${reason}`
-      );
+      const updatedBill: Bill = {
+        ...bill,
+        status: 'refunded',
+        paymentStatus: 'refunded',
+        refundedAt: new Date().toISOString(),
+        refundedBy: state.currentUser.name,
+        refundReason: reason,
+      };
 
-      setState((prev) => {
-        const updatedBills = prev.bills.map((b) => {
-          if (b.id === bill.id) {
-            return {
-              ...b,
-              status: 'refunded' as const,
-              refundReason: reason,
-              cancelledAt: timestamp,
-            };
-          }
-          return b;
-        });
-
-        const updatedStudents = prev.students.map((s) => {
-          if (s.id === bill.studentId) {
-            return {
-              ...s,
-              totalSpending: Math.max(0, s.totalSpending - bill.total),
-              monthlySpending: Math.max(0, s.monthlySpending - bill.total),
-            };
-          }
-          return s;
-        });
-
-        // Add refund to shift if cash
-        const updatedShifts = prev.shifts.map((sh) => {
-          if (sh.cashierId === bill.cashierId && sh.status === 'open') {
-            return {
-              ...sh,
-              refunds: sh.refunds + bill.total,
-              expectedClosingCash: Math.max(0, sh.expectedClosingCash - bill.total),
-            };
-          }
-          return sh;
-        });
-
-        return {
-          ...prev,
-          bills: updatedBills,
-          students: updatedStudents,
-          shifts: updatedShifts,
-          auditLogs: [audit, ...prev.auditLogs],
-        };
+      // Restore inventory
+      const updatedProducts = state.products.map((p) => {
+        const bi = bill.items.find((it) => it.productId === p.id);
+        if (bi && p.isStockTracked) {
+          return {
+            ...p,
+            stockQuantity: p.stockQuantity + bi.quantity,
+            updatedAt: new Date().toISOString(),
+          };
+        }
+        return p;
       });
 
-      addToast('warning', 'Bill Refunded', `Refund recorded for Bill ${bill.billNumber}.`);
+      // Update student spending
+      const updatedStudents = state.students.map((s) => {
+        if (s.id === bill.studentId) {
+          return {
+            ...s,
+            monthlySpending: Math.max(0, s.monthlySpending - bill.totalAmount),
+            totalSpending: Math.max(0, s.totalSpending - bill.totalAmount),
+          };
+        }
+        return s;
+      });
+
+      const audit = logAudit(
+        'BILL_REFUND',
+        'Bill',
+        bill.billNumber,
+        `Bill ${bill.billNumber} refunded by ${state.currentUser.name}. Reason: ${reason}`
+      );
+
+      setState((prev) => ({
+        ...prev,
+        bills: prev.bills.map((b) => (b.id === bill.id ? updatedBill : b)),
+        products: updatedProducts,
+        students: updatedStudents,
+        auditLogs: [audit, ...prev.auditLogs],
+      }));
+
+      addToast('info', `Bill ${bill.billNumber} Refunded`, `₹${bill.totalAmount.toFixed(2)} refunded.`);
       return { success: true };
     },
-    [state, logAudit, addToast]
+    [state.bills, state.products, state.students, state.currentUser, logAudit, addToast]
   );
 
-  // Add student
+  // Student Actions
   const addStudent = useCallback(
-    (studentData: Omit<Student, 'monthlySpending' | 'totalSpending' | 'billsCount' | 'createdAt'>) => {
-      const existing = state.students.find(
-        (s) => s.id.toLowerCase() === studentData.id.toLowerCase()
-      );
-      if (existing) {
-        return { success: false, error: `Student ID "${studentData.id}" already exists.` };
+    (studentData: Omit<Student, 'createdAt' | 'billsCount' | 'monthlySpending' | 'totalSpending' | 'pendingBalance' | 'balance'>) => {
+      if (state.students.some((s) => s.id.toLowerCase() === studentData.id.toLowerCase())) {
+        return { success: false, error: `Student with ID ${studentData.id} already exists!` };
       }
 
       const newStudent: Student = {
         ...studentData,
+        createdAt: new Date().toISOString(),
+        billsCount: 0,
         monthlySpending: 0,
         totalSpending: 0,
-        billsCount: 0,
-        createdAt: new Date().toISOString(),
+        pendingBalance: 0,
+        balance: 0,
+        barcode: `BC-${studentData.id}`,
       };
 
-      const audit = logAudit(
-        'ADD_STUDENT',
-        'student',
-        newStudent.id,
-        `Registered student ${newStudent.name} (${newStudent.id}) - Room ${newStudent.roomNumber}`
-      );
+      const audit = logAudit('STUDENT_CREATE', 'Student', newStudent.id, `Enrolled student ${newStudent.name} (${newStudent.id})`);
 
       setState((prev) => ({
         ...prev,
@@ -510,100 +683,94 @@ export const MessProvider: React.FC<{ children: React.ReactNode }> = ({ children
         auditLogs: [audit, ...prev.auditLogs],
       }));
 
-      addToast('success', 'Student Registered', `${newStudent.name} added successfully.`);
+      addToast('success', 'Student Enrolled', `${newStudent.name} (${newStudent.id}) registered.`);
       return { success: true };
     },
     [state.students, logAudit, addToast]
   );
 
-  // Update student
   const updateStudent = useCallback(
     (id: string, updates: Partial<Student>) => {
-      const student = state.students.find((s) => s.id === id);
-      if (!student) return { success: false, error: 'Student not found' };
-
-      const audit = logAudit(
-        'UPDATE_STUDENT',
-        'student',
-        id,
-        `Updated details for student ${student.name} (${id})`
-      );
-
       setState((prev) => ({
         ...prev,
-        students: prev.students.map((s) => (s.id === id ? { ...s, ...updates } : s)),
-        auditLogs: [audit, ...prev.auditLogs],
+        students: prev.students.map((s) => {
+          if (s.id === id) {
+            const nextPending = updates.pendingBalance !== undefined ? updates.pendingBalance : s.pendingBalance;
+            return { ...s, ...updates, pendingBalance: nextPending, balance: nextPending };
+          }
+          return s;
+        }),
       }));
-
-      addToast('success', 'Student Updated', `Profile for ${student.name} updated.`);
+      addToast('success', 'Student Updated', `Details for ${id} saved.`);
       return { success: true };
     },
-    [state.students, logAudit, addToast]
+    [addToast]
   );
 
-  // Toggle student status
   const toggleStudentStatus = useCallback(
     (id: string) => {
-      const student = state.students.find((s) => s.id === id);
-      if (!student) return;
-      const nextStatus: Student['status'] = student.status === 'active' ? 'inactive' : 'active';
-      updateStudent(id, { status: nextStatus });
+      let nextStatus: Student['status'] = 'active';
+      setState((prev) => ({
+        ...prev,
+        students: prev.students.map((s) => {
+          if (s.id === id) {
+            nextStatus = s.status === 'active' ? 'inactive' : 'active';
+            return { ...s, status: nextStatus };
+          }
+          return s;
+        }),
+      }));
+      addToast('info', 'Student Status Changed', `Status set to ${nextStatus.toUpperCase()}`);
+      return { success: true };
     },
-    [state.students, updateStudent]
+    [addToast]
   );
 
-  // Bulk import students
   const bulkImportStudents = useCallback(
-    (importList: Partial<Student>[]): BulkImportResult => {
-      let success = 0;
-      let failed = 0;
-      let duplicates = 0;
+    (importedList: Partial<Student>[]) => {
+      let importedCount = 0;
+      let duplicateCount = 0;
+      let failedCount = 0;
       const errors: string[] = [];
-      const newStudents: Student[] = [];
       const existingIds = new Set(state.students.map((s) => s.id.toLowerCase()));
+      const newStudents: Student[] = [];
 
-      importList.forEach((raw, idx) => {
-        if (!raw.id || !raw.name) {
-          failed++;
-          errors.push(`Row ${idx + 1}: Missing student ID or name.`);
+      importedList.forEach((row, idx) => {
+        const id = row.id?.trim() || `STU-${String(state.students.length + idx + 1).padStart(3, '0')}`;
+        if (existingIds.has(id.toLowerCase())) {
+          duplicateCount++;
           return;
         }
 
-        const normId = raw.id.trim();
-        if (existingIds.has(normId.toLowerCase())) {
-          duplicates++;
-          return;
-        }
-
-        existingIds.add(normId.toLowerCase());
-        const student: Student = {
-          id: normId,
-          name: raw.name.trim(),
-          department: raw.department || 'General Engineering',
-          year: Number(raw.year) || 1,
-          roomNumber: raw.roomNumber || 'Hostel Block',
-          hostelBlock: raw.hostelBlock || 'A',
-          phone: raw.phone || '+91 90000 00000',
-          email: raw.email || `${normId.toLowerCase()}@hostel.edu`,
-          status: (raw.status as Student['status']) || 'active',
-          barcode: raw.barcode || `BRC-${normId}`,
+        existingIds.add(id.toLowerCase());
+        importedCount++;
+        newStudents.push({
+          id,
+          name: row.name?.trim() || `Resident ${id}`,
+          department: row.department?.trim() || 'General Engineering',
+          year: Number(row.year) || 1,
+          roomNumber: row.roomNumber?.trim() || 'A-101',
+          hostelBlock: row.hostelBlock?.trim() || 'Block A',
+          phone: row.phone?.trim() || '+91 98000 00000',
+          email: row.email?.trim() || `${id.toLowerCase()}@hostel.edu`,
+          status: (row.status as StudentStatus) || 'active',
           creditLimit: 3000,
           monthlySpending: 0,
           totalSpending: 0,
-          billsCount: 0,
+          pendingBalance: 0,
+          balance: 0,
           createdAt: new Date().toISOString(),
-        };
-
-        newStudents.push(student);
-        success++;
+          billsCount: 0,
+          barcode: `BC-${id}`,
+        });
       });
 
-      if (newStudents.length > 0) {
+      if (importedCount > 0) {
         const audit = logAudit(
-          'BULK_IMPORT_STUDENTS',
-          'student',
-          `BATCH-${Date.now()}`,
-          `Bulk imported ${newStudents.length} students via CSV`
+          'STUDENT_BULK_IMPORT',
+          'Student',
+          'BULK-IMPORT',
+          `Imported ${importedCount} students (${duplicateCount} skipped duplicates)`
         );
 
         setState((prev) => ({
@@ -611,35 +778,33 @@ export const MessProvider: React.FC<{ children: React.ReactNode }> = ({ children
           students: [...newStudents, ...prev.students],
           auditLogs: [audit, ...prev.auditLogs],
         }));
+
+        addToast('success', 'Bulk Import Complete', `Added ${importedCount} students (${duplicateCount} duplicates skipped)`);
+      } else {
+        addToast('warning', 'No New Records', 'All student records in the file already existed.');
       }
 
-      addToast(
-        success > 0 ? 'success' : 'warning',
-        'Import Processed',
-        `Imported: ${success}, Duplicates skipped: ${duplicates}, Failed: ${failed}`
-      );
-
-      return { success, failed, duplicates, errors };
+      return {
+        success: importedCount,
+        failed: failedCount,
+        duplicates: duplicateCount,
+        errors,
+      };
     },
     [state.students, logAudit, addToast]
   );
 
-  // Add Product
+  // Product Actions
   const addProduct = useCallback(
     (productData: Omit<Product, 'id' | 'updatedAt'>) => {
-      const id = `PRD-${100 + state.products.length + 1}`;
+      const id = `PRD-${String(state.products.length + 1).padStart(3, '0')}`;
       const newProduct: Product = {
         ...productData,
         id,
         updatedAt: new Date().toISOString(),
       };
 
-      const audit = logAudit(
-        'ADD_PRODUCT',
-        'product',
-        id,
-        `Added menu product: ${newProduct.name} (₹${newProduct.price}) in category ${newProduct.category}`
-      );
+      const audit = logAudit('PRODUCT_CREATE', 'Product', id, `Added ${newProduct.name} (₹${newProduct.price})`);
 
       setState((prev) => ({
         ...prev,
@@ -648,257 +813,385 @@ export const MessProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }));
 
       addToast('success', 'Product Added', `${newProduct.name} added to menu.`);
-      return { success: true, product: newProduct };
-    },
-    [state.products, logAudit, addToast]
-  );
-
-  // Update Product (never mutates historical bill items)
-  const updateProduct = useCallback(
-    (id: string, updates: Partial<Product>) => {
-      const prod = state.products.find((p) => p.id === id);
-      if (!prod) return { success: false, error: 'Product not found' };
-
-      const priceChanged = updates.price !== undefined && updates.price !== prod.price;
-      const description = priceChanged
-        ? `Updated price for ${prod.name} from ₹${prod.price} to ₹${updates.price}`
-        : `Updated product details for ${prod.name}`;
-
-      const audit = logAudit('UPDATE_PRODUCT', 'product', id, description);
-
-      setState((prev) => ({
-        ...prev,
-        products: prev.products.map((p) =>
-          p.id === id ? { ...p, ...updates, updatedAt: new Date().toISOString() } : p
-        ),
-        auditLogs: [audit, ...prev.auditLogs],
-      }));
-
-      addToast('success', 'Product Updated', `${prod.name} successfully updated.`);
       return { success: true };
     },
     [state.products, logAudit, addToast]
   );
 
-  // Toggle availability
-  const toggleProductAvailability = useCallback(
-    (id: string) => {
-      const prod = state.products.find((p) => p.id === id);
-      if (!prod) return;
-      updateProduct(id, { isAvailable: !prod.isAvailable });
+  const updateProduct = useCallback(
+    (id: string, updates: Partial<Product>) => {
+      setState((prev) => ({
+        ...prev,
+        products: prev.products.map((p) => (p.id === id ? { ...p, ...updates, updatedAt: new Date().toISOString() } : p)),
+      }));
+      addToast('success', 'Product Updated', `Changes saved.`);
+      return { success: true };
     },
-    [state.products, updateProduct]
+    [addToast]
   );
 
-  // Stock Adjustment
-  const adjustStock = useCallback(
-    (productId: string, type: StockMovementType, quantity: number, reason: string) => {
-      const prod = state.products.find((p) => p.id === productId);
-      if (!prod) return { success: false, error: 'Product not found' };
+  const toggleProductAvailability = useCallback(
+    (productId: string) => {
+      let isNowAvailable = true;
+      setState((prev) => ({
+        ...prev,
+        products: prev.products.map((p) => {
+          if (p.id === productId) {
+            isNowAvailable = !p.isAvailable;
+            return { ...p, isAvailable: isNowAvailable, updatedAt: new Date().toISOString() };
+          }
+          return p;
+        }),
+      }));
+      addToast('info', 'Availability Toggled', `Item is now ${isNowAvailable ? 'Available' : 'Unavailable'}`);
+      return { success: true };
+    },
+    [addToast]
+  );
 
-      let nextStock = prod.stockQuantity;
-      if (type === 'in') nextStock += quantity;
-      else if (type === 'out' || type === 'wastage') nextStock = Math.max(0, nextStock - quantity);
-      else if (type === 'adjustment') nextStock = quantity;
+  const updateProductPrice = useCallback(
+    (productId: string, newPrice: number, reason: string) => {
+      let pName = '';
+      let oldPrice = 0;
 
-      const movement: StockMovement = {
-        id: `SM-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-        productId: prod.id,
-        productName: prod.name,
-        type,
-        quantity,
-        previousStock: prod.stockQuantity,
-        newStock: nextStock,
-        reason,
-        timestamp: new Date().toISOString(),
-        createdBy: state.currentUser.name,
-      };
+      setState((prev) => ({
+        ...prev,
+        products: prev.products.map((p) => {
+          if (p.id === productId) {
+            pName = p.name;
+            oldPrice = p.price;
+            return { ...p, price: newPrice, updatedAt: new Date().toISOString() };
+          }
+          return p;
+        }),
+      }));
 
       const audit = logAudit(
-        'STOCK_ADJUSTMENT',
-        'inventory',
+        'PRICE_ADJUST',
+        'Product',
         productId,
-        `Stock adjustment (${type.toUpperCase()} ${quantity} ${prod.unit}) for ${prod.name}. Reason: ${reason}`
+        `Adjusted price of ${pName} from ₹${oldPrice} to ₹${newPrice}`,
+        reason
       );
 
       setState((prev) => ({
         ...prev,
-        products: prev.products.map((p) =>
-          p.id === productId ? { ...p, stockQuantity: nextStock, updatedAt: new Date().toISOString() } : p
-        ),
+        auditLogs: [audit, ...prev.auditLogs],
+      }));
+
+      addToast('success', 'Price Updated', `${pName} is now ₹${newPrice.toFixed(2)}`);
+      return { success: true };
+    },
+    [logAudit, addToast]
+  );
+
+  const adjustStock = useCallback(
+    (productId: string, type: StockMovementType, quantity: number, reason: string) => {
+      const prod = state.products.find((p) => p.id === productId);
+      if (!prod) return { success: false, error: 'Product not found.' };
+
+      const prevStock = prod.stockQuantity;
+      let newStock = prevStock;
+      if (type === 'in') newStock = prevStock + quantity;
+      else if (type === 'out' || type === 'wastage') newStock = Math.max(0, prevStock - quantity);
+      else if (type === 'adjustment') newStock = quantity;
+
+      const movement: StockMovement = {
+        id: `MOV-${Date.now()}`,
+        productId: prod.id,
+        productName: prod.name,
+        type,
+        quantity,
+        previousStock: prevStock,
+        newStock,
+        reason,
+        performedBy: state.currentUser.name,
+        createdBy: state.currentUser.name,
+        timestamp: new Date().toISOString(),
+      };
+
+      const updatedProducts = state.products.map((p) => (p.id === productId ? { ...p, stockQuantity: newStock, updatedAt: new Date().toISOString() } : p));
+
+      const audit = logAudit(
+        'STOCK_ADJUST',
+        'Inventory',
+        productId,
+        `Stock adjustment (${type.toUpperCase()}) for ${prod.name}: ${prevStock} -> ${newStock} (${quantity})`,
+        reason
+      );
+
+      setState((prev) => ({
+        ...prev,
+        products: updatedProducts,
         stockMovements: [movement, ...prev.stockMovements],
         auditLogs: [audit, ...prev.auditLogs],
       }));
 
-      addToast('success', 'Inventory Updated', `${prod.name} stock updated to ${nextStock} ${prod.unit}.`);
+      addToast('info', 'Stock Updated', `${prod.name} stock adjusted to ${newStock} units`);
       return { success: true };
     },
     [state.products, state.currentUser, logAudit, addToast]
   );
 
-  // Start shift
+  // Shift Actions
   const startShift = useCallback(
-    (openingCash: number) => {
-      const existingOpen = state.shifts.find(
-        (sh) => sh.cashierId === state.currentUser.id && sh.status === 'open'
-      );
-      if (existingOpen) {
-        return { success: false, error: 'You already have an active open shift.' };
-      }
-
+    (openingFloat: number, notes?: string) => {
+      const shiftId = `SHIFT-2026-${String(state.shifts.length + 1).padStart(3, '0')}`;
       const newShift: Shift = {
-        id: `SHF-${Date.now().toString().slice(-6)}`,
+        id: shiftId,
         cashierId: state.currentUser.id,
         cashierName: state.currentUser.name,
+        openedAt: new Date().toISOString(),
         startTime: new Date().toISOString(),
-        openingCash,
-        cashReceived: 0,
-        upiReceived: 0,
-        creditReceived: 0,
-        refunds: 0,
-        expectedClosingCash: openingCash,
         status: 'open',
+        openingFloat,
+        openingCash: openingFloat,
+        cashInflow: 0,
+        cashReceived: 0,
+        upiInflow: 0,
+        upiReceived: 0,
+        creditInflow: 0,
+        refunds: 0,
+        expectedClosingCash: openingFloat,
+        totalSales: 0,
         billsCount: 0,
+        notes,
       };
 
-      const audit = logAudit(
-        'START_SHIFT',
-        'shift',
-        newShift.id,
-        `Started cashier shift for ${state.currentUser.name} with opening cash ₹${openingCash}`
-      );
+      const audit = logAudit('SHIFT_OPEN', 'Shift', shiftId, `Opened shift ${shiftId} with ₹${openingFloat} opening float`);
 
       setState((prev) => ({
         ...prev,
         shifts: [newShift, ...prev.shifts],
+        activeShift: newShift,
         auditLogs: [audit, ...prev.auditLogs],
       }));
 
-      addToast('success', 'Shift Started', `Shift opened with initial cash ₹${openingCash}.`);
+      addToast('success', 'Shift Opened', `Active drawer ready with ₹${openingFloat.toFixed(2)} float.`);
       return { success: true, shift: newShift };
     },
     [state.shifts, state.currentUser, logAudit, addToast]
   );
 
-  // Close shift
   const closeShift = useCallback(
-    (shiftId: string, actualClosingCash: number, notes?: string) => {
-      const shift = state.shifts.find((sh) => sh.id === shiftId);
-      if (!shift) return { success: false, error: 'Shift not found' };
+    (shiftId: string, closingCashCounted: number, notes?: string) => {
+      const shift = state.shifts.find((s) => s.id === shiftId);
+      if (!shift) return { success: false, error: 'Shift not found.' };
 
-      const difference = actualClosingCash - shift.expectedClosingCash;
-      const endTime = new Date().toISOString();
+      const expectedCash = shift.openingFloat + shift.cashInflow;
+      const cashVariance = closingCashCounted - expectedCash;
+
+      const closedShift: Shift = {
+        ...shift,
+        status: 'closed',
+        closedAt: new Date().toISOString(),
+        endTime: new Date().toISOString(),
+        closingCashCounted,
+        actualClosingCash: closingCashCounted,
+        expectedClosingCash: expectedCash,
+        cashVariance,
+        difference: cashVariance,
+        notes: notes || shift.notes,
+      };
 
       const audit = logAudit(
-        'CLOSE_SHIFT',
-        'shift',
+        'SHIFT_CLOSE',
+        'Shift',
         shiftId,
-        `Closed shift for ${shift.cashierName}. Expected: ₹${shift.expectedClosingCash}, Actual: ₹${actualClosingCash}, Difference: ₹${difference}`
+        `Closed shift ${shiftId}. Counted ₹${closingCashCounted}, Variance: ₹${cashVariance}`
       );
 
       setState((prev) => ({
         ...prev,
-        shifts: prev.shifts.map((sh) =>
-          sh.id === shiftId
-            ? {
-                ...sh,
-                endTime,
-                actualClosingCash,
-                difference,
-                status: 'closed' as const,
-                notes: notes || sh.notes,
-              }
-            : sh
-        ),
+        shifts: prev.shifts.map((s) => (s.id === shiftId ? closedShift : s)),
+        activeShift: prev.activeShift?.id === shiftId ? null : prev.activeShift,
         auditLogs: [audit, ...prev.auditLogs],
       }));
 
       addToast(
-        difference === 0 ? 'success' : 'warning',
+        cashVariance === 0 ? 'success' : 'warning',
         'Shift Closed',
-        `Shift closed. Drawer variance: ₹${difference.toFixed(2)}.`
+        cashVariance === 0 ? 'Cash drawer reconciled with 0 variance!' : `Shift closed with variance of ₹${cashVariance.toFixed(2)}`
       );
-      return { success: true };
+
+      return { success: true, shift: closedShift };
     },
     [state.shifts, logAudit, addToast]
   );
 
-  // Settings
-  const updateSettings = useCallback(
-    (newSettings: MessSettings) => {
-      const audit = logAudit('UPDATE_SETTINGS', 'settings', 'GLOBAL', 'Updated mess configuration and preferences');
-      setState((prev) => ({
-        ...prev,
-        settings: newSettings,
-        auditLogs: [audit, ...prev.auditLogs],
-      }));
-      addToast('success', 'Settings Saved', 'Mess preferences updated successfully.');
-    },
-    [logAudit, addToast]
-  );
-
-  // User management
+  // User Actions
   const addUser = useCallback(
-    (userData: Omit<User, 'id' | 'lastLogin'>) => {
-      const id = `USR-${(state.users.length + 1).toString().padStart(3, '0')}`;
+    (userData: (Omit<User, 'id' | 'lastLogin'> & { id?: string }) | Omit<User, 'lastLogin'>) => {
+      const trimmedUsername = userData.username.trim().toLowerCase();
+      if (!trimmedUsername) {
+        return { success: false, error: 'Username is required.' };
+      }
+      if (state.users.some((u) => u.username.toLowerCase() === trimmedUsername)) {
+        return { success: false, error: `Username "${userData.username}" is already taken.` };
+      }
+
+      let id = userData.id?.trim();
+      if (id) {
+        if (state.users.some((u) => u.id.toLowerCase() === id!.toLowerCase())) {
+          return { success: false, error: `User ID "${id}" is already assigned to another account.` };
+        }
+      } else {
+        id = `USR-${String(state.users.length + 1).padStart(3, '0')}`;
+      }
+
       const newUser: User = {
         ...userData,
         id,
+        username: trimmedUsername,
+        name: userData.name.trim(),
+        role: userData.role || 'cashier',
+        category: userData.category || "Men's Mess",
+        designation: userData.designation || (userData.role === 'admin' ? 'System Administrator' : "Men's Mess Cashier"),
+        genderCategory: userData.genderCategory || (userData.role === 'admin' ? 'Co-ed' : 'Men'),
+        active: userData.active !== undefined ? userData.active : true,
         lastLogin: new Date().toISOString(),
+        permissions: userData.permissions || (userData.role === 'admin' ? ['all'] : ['pos.read', 'pos.write', 'shifts.read']),
       };
-      const audit = logAudit('ADD_USER', 'user', id, `Created new system account: ${newUser.name} (${newUser.role})`);
+
+      const audit = logAudit(
+        'USER_CREATE',
+        'User',
+        id,
+        `Added user ${newUser.name} (ID: ${id}, Username: ${newUser.username}, Role: ${newUser.role}, Category: ${newUser.category}, Designation: ${newUser.designation})`
+      );
+
       setState((prev) => ({
         ...prev,
         users: [...prev.users, newUser],
         auditLogs: [audit, ...prev.auditLogs],
       }));
-      addToast('success', 'User Added', `Account created for ${newUser.name}.`);
-      return { success: true };
+
+      addToast('success', 'User Created', `${newUser.name} (${newUser.username}) added to personnel roster.`);
+      return { success: true, user: newUser };
     },
     [state.users, logAudit, addToast]
   );
 
   const updateUser = useCallback(
-    (id: string, updates: Partial<User>) => {
-      setState((prev) => ({
-        ...prev,
-        users: prev.users.map((u) => (u.id === id ? { ...u, ...updates } : u)),
-      }));
-      addToast('success', 'User Updated', 'Account details updated.');
+    (currentId: string, updates: Partial<User>) => {
+      const existingUser = state.users.find((u) => u.id === currentId);
+      if (!existingUser) {
+        return { success: false, error: `User with ID ${currentId} was not found.` };
+      }
+
+      const targetId = updates.id !== undefined && updates.id.trim() ? updates.id.trim() : currentId;
+      const targetUsername = updates.username !== undefined ? updates.username.trim().toLowerCase() : existingUser.username.toLowerCase();
+
+      // Check if new ID collides with another user
+      if (targetId.toLowerCase() !== currentId.toLowerCase()) {
+        const idCollision = state.users.some(
+          (u) => u.id.toLowerCase() !== currentId.toLowerCase() && u.id.toLowerCase() === targetId.toLowerCase()
+        );
+        if (idCollision) {
+          return { success: false, error: `User ID "${targetId}" is already taken by another account.` };
+        }
+      }
+
+      // Check if new Username collides with another user
+      if (targetUsername !== existingUser.username.toLowerCase()) {
+        const usernameCollision = state.users.some(
+          (u) => u.id.toLowerCase() !== currentId.toLowerCase() && u.username.toLowerCase() === targetUsername
+        );
+        if (usernameCollision) {
+          return { success: false, error: `Username "${updates.username}" is already taken by another user.` };
+        }
+      }
+
+      const updatedUser: User = {
+        ...existingUser,
+        ...updates,
+        id: targetId,
+        username: updates.username !== undefined ? updates.username.trim() : existingUser.username,
+        name: updates.name !== undefined ? updates.name.trim() : existingUser.name,
+      };
+
+      const audit = logAudit(
+        'USER_UPDATE',
+        'User',
+        targetId,
+        `Updated user ${updatedUser.name} (ID: ${targetId}, Username: ${updatedUser.username}, Category: ${updatedUser.category || 'N/A'}, Designation: ${updatedUser.designation || 'N/A'})`
+      );
+
+      setState((prev) => {
+        const updatedUsers = prev.users.map((u) => (u.id === currentId ? updatedUser : u));
+        const updatedShifts = prev.shifts.map((sh) => {
+          if (sh.cashierId === currentId) {
+            return {
+              ...sh,
+              cashierId: targetId,
+              cashierName: updatedUser.name,
+            };
+          }
+          return sh;
+        });
+
+        const isCurrent = prev.currentUser.id === currentId;
+
+        return {
+          ...prev,
+          users: updatedUsers,
+          currentUser: isCurrent ? updatedUser : prev.currentUser,
+          shifts: updatedShifts,
+          auditLogs: [audit, ...prev.auditLogs],
+        };
+      });
+
+      addToast('success', 'User Updated', `Changes saved for ${updatedUser.name} (${updatedUser.username}).`);
+      return { success: true };
     },
-    [addToast]
+    [state.users, logAudit, addToast]
   );
 
   const toggleUserStatus = useCallback(
     (id: string) => {
-      const user = state.users.find((u) => u.id === id);
-      if (!user) return;
-      if (user.role === 'admin' && state.users.filter((u) => u.role === 'admin' && u.active).length <= 1) {
-        addToast('error', 'Cannot Deactivate', 'System must have at least one active administrator.');
-        return;
-      }
-      updateUser(id, { active: !user.active });
+      setState((prev) => ({
+        ...prev,
+        users: prev.users.map((u) => (u.id === id ? { ...u, active: !u.active } : u)),
+      }));
+      addToast('info', 'Status Updated', 'User access status toggled.');
+      return { success: true };
     },
-    [state.users, updateUser, addToast]
+    [addToast]
   );
 
-  // Reset Demo
-  const resetDemoData = useCallback(() => {
-    const fresh = resetStateToInitial();
-    setState(fresh);
-    addToast('info', 'Demo Data Reset', 'Dataset restored to original 500 students and catalog.');
-  }, [addToast]);
+  // Settings
+  const updateSettings = useCallback(
+    (updates: Partial<MessSettings>) => {
+      const audit = logAudit('SETTINGS_UPDATE', 'Settings', 'CONFIG', `Updated mess configuration properties`);
+
+      setState((prev) => ({
+        ...prev,
+        settings: { ...prev.settings, ...updates },
+        auditLogs: [audit, ...prev.auditLogs],
+      }));
+
+      addToast('success', 'Settings Saved', 'Mess configuration parameters updated.');
+      return { success: true };
+    },
+    [logAudit, addToast]
+  );
 
   return (
     <MessContext.Provider
       value={{
         state,
         currentUser: state.currentUser,
+        currentStudent,
         toasts,
         addToast,
         dismissToast,
         login,
+        loginUser,
         logout,
+        resetDemoData,
+        loginStudent,
+        activateStudentAccount,
+        payStudentDue,
         createBill,
         cancelBill,
         refundBill,
@@ -908,15 +1201,17 @@ export const MessProvider: React.FC<{ children: React.ReactNode }> = ({ children
         bulkImportStudents,
         addProduct,
         updateProduct,
+        updateProductPrice,
         toggleProductAvailability,
         adjustStock,
         startShift,
         closeShift,
-        updateSettings,
         addUser,
         updateUser,
         toggleUserStatus,
-        resetDemoData,
+        updateSettings,
+        updateMealSchedule,
+        isLoggedIn,
       }}
     >
       {children}
@@ -924,10 +1219,10 @@ export const MessProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 };
 
-export function useMess() {
+export const useMess = (): MessContextType => {
   const context = useContext(MessContext);
   if (!context) {
     throw new Error('useMess must be used within a MessProvider');
   }
   return context;
-}
+};

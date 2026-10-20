@@ -1,6 +1,21 @@
 import { Bill, Product, Student, Shift } from '../types';
 import { getTodayDateString } from './date';
 
+export interface ProductTodaySale {
+  productId: string;
+  code: string;
+  name: string;
+  category: string;
+  mealSlot: 'morning' | 'afternoon' | 'evening' | 'all_day';
+  price: number;
+  quantitySoldToday: number;
+  todayRevenue: number;
+  unit: string;
+  imageEmoji?: string;
+  imageUrl?: string;
+  contributionPercent: number;
+}
+
 export interface DashboardMetrics {
   todaySales: number;
   todayBillsCount: number;
@@ -11,6 +26,10 @@ export interface DashboardMetrics {
   completedRevenueTotal: number;
   refundedTotal: number;
   cancelledTotal: number;
+  totalProductsCount: number;
+  activeProductsSoldTodayCount: number;
+  topProductToday: ProductTodaySale | null;
+  todayProductSales: ProductTodaySale[];
   paymentBreakdown: {
     cash: number;
     upi: number;
@@ -53,6 +72,7 @@ export function computeDashboardMetrics(
   };
 
   const productStats: { [name: string]: { category: string; quantity: number; revenue: number } } = {};
+  const todayProductQtyMap: { [key: string]: number } = {};
   const cashierStats: { [name: string]: { billsCount: number; totalSales: number } } = {};
 
   bills.forEach((bill) => {
@@ -66,6 +86,9 @@ export function computeDashboardMetrics(
         todayBillsCount += 1;
         bill.items.forEach((item) => {
           todayItemsCount += item.quantity;
+          const k = item.productId || item.productName;
+          todayProductQtyMap[k] = (todayProductQtyMap[k] || 0) + item.quantity;
+          todayProductQtyMap[item.productName] = (todayProductQtyMap[item.productName] || 0) + item.quantity;
         });
       }
 
@@ -107,7 +130,32 @@ export function computeDashboardMetrics(
   const activeStudentsCount = students.filter((s) => s.status === 'active').length;
   const avgBillValue = todayBillsCount > 0 ? todaySales / todayBillsCount : 0;
 
-  // Top 5 products by quantity
+  // Compute breakdown for EVERY product in the menu
+  const todayProductSales: ProductTodaySale[] = products.map((p) => {
+    const qty = todayProductQtyMap[p.id] || todayProductQtyMap[p.name] || 0;
+    const rev = qty * p.price;
+    const contributionPercent = todaySales > 0 ? Math.round((rev / todaySales) * 1000) / 10 : 0;
+
+    return {
+      productId: p.id,
+      code: p.code,
+      name: p.name,
+      category: p.category,
+      mealSlot: (p.mealSlot as any) || 'all_day',
+      price: p.price,
+      quantitySoldToday: qty,
+      todayRevenue: rev,
+      unit: p.unit,
+      imageEmoji: p.imageEmoji,
+      imageUrl: p.imageUrl,
+      contributionPercent,
+    };
+  }).sort((a, b) => b.quantitySoldToday - a.quantitySoldToday || b.todayRevenue - a.todayRevenue);
+
+  const topProductToday = todayProductSales.find((p) => p.quantitySoldToday > 0) || todayProductSales[0] || null;
+  const activeProductsSoldTodayCount = todayProductSales.filter((p) => p.quantitySoldToday > 0).length;
+
+  // Top 5 products by lifetime quantity
   const topProducts = Object.entries(productStats)
     .map(([name, stat]) => ({
       name,
@@ -141,6 +189,10 @@ export function computeDashboardMetrics(
     completedRevenueTotal,
     refundedTotal,
     cancelledTotal,
+    totalProductsCount: products.length,
+    activeProductsSoldTodayCount,
+    topProductToday,
+    todayProductSales,
     paymentBreakdown,
     topProducts,
     cashierSummaries,
