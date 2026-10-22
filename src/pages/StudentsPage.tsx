@@ -276,10 +276,10 @@ export const StudentsPage: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight">
-            Student Management &amp; Accounts
+            Students
           </h1>
           <p className="text-xs md:text-sm text-slate-500 mt-0.5">
-            Total {state.students.length} registered hostel residents &middot; Filter and manage accounts
+            {state.students.length} Registered Students
           </p>
         </div>
 

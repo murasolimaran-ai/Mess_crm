@@ -54,19 +54,19 @@ export const Topbar: React.FC<TopbarProps> = ({ onMobileMenuToggle }) => {
   }, []);
 
   const pathMap: Record<string, { title: string; section: string }> = {
-    '/': { title: 'Admin Overview Dashboard', section: 'Overview' },
-    '/billing': { title: 'High-Speed Point of Sale Billing', section: 'Billing / POS' },
-    '/students': { title: 'Students Directory & Spend Ledgers', section: 'Students' },
-    '/products': { title: 'Food Menu & Product Catalog', section: 'Products & Menu' },
-    '/transactions': { title: 'Bills & Transaction Ledger', section: 'Bills & Transactions' },
-    '/analytics': { title: 'Sales Analytics & Revenue Reports', section: 'Sales & Analytics' },
-    '/inventory': { title: 'Food Inventory & Stock Valuation', section: 'Inventory' },
-    '/cashiers': { title: 'Cashier Shift Logs & Cash Drawers', section: 'Cashiers & Shifts' },
-    '/reconciliation': { title: 'Daily End-of-Day Payment Reconciliation', section: 'Reconciliation' },
-    '/audit-logs': { title: 'Immutable System Audit Trail', section: 'Audit Logs' },
-    '/users': { title: 'User Management & Role Permissions', section: 'User Management' },
-    '/settings': { title: 'Mess ERP Configuration & Rules', section: 'Settings' },
-    '/student-portal': { title: 'Student Dining Account & Self-Service Portal', section: 'Student Portal' },
+    '/': { title: 'Overview', section: 'Overview' },
+    '/billing': { title: 'Billing / POS', section: 'Billing' },
+    '/students': { title: 'Students', section: 'Students' },
+    '/products': { title: 'Products & Menu', section: 'Products' },
+    '/transactions': { title: 'Bills & Transactions', section: 'Transactions' },
+    '/analytics': { title: 'Sales & Analytics', section: 'Analytics' },
+    '/inventory': { title: 'Inventory', section: 'Inventory' },
+    '/cashiers': { title: 'Cashiers & Shifts', section: 'Cashiers' },
+    '/reconciliation': { title: 'Payment Reconciliation', section: 'Reconciliation' },
+    '/audit-logs': { title: 'Audit Logs', section: 'Audit Logs' },
+    '/users': { title: 'User Management', section: 'Users' },
+    '/settings': { title: 'Settings', section: 'Settings' },
+    '/student-portal': { title: 'Student Portal', section: 'Student Portal' },
   };
 
   const currentRouteMeta = pathMap[location.pathname] || {

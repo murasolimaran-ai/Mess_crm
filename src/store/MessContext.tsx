@@ -348,14 +348,33 @@ export const MessProvider: React.FC<{ children: React.ReactNode }> = ({ children
         `Student ${student.name} (${student.id}) paid ₹${amount} via ${paymentMethod.toUpperCase()} (Ref: ${txnRef}). Remaining due: ₹${newPending}`
       );
 
-      setState((prev) => ({
-        ...prev,
-        students: prev.students.map((s) =>
-          s.id === student.id ? { ...s, pendingBalance: newPending, balance: newPending } : s
-        ),
-        studentPayments: [paymentRecord, ...(prev.studentPayments || [])],
-        auditLogs: [audit, ...prev.auditLogs],
-      }));
+      setState((prev) => {
+        let rem = amount;
+        const updatedBills = prev.bills.map((b) => {
+          if (b.studentId === student.id && b.paymentStatus === 'pending') {
+            if (rem > 0) {
+              rem -= b.totalAmount;
+              return {
+                ...b,
+                paymentStatus: 'paid' as PaymentStatus,
+                paidAt: paymentRecord.timestamp,
+                paymentRef: payNumber,
+              };
+            }
+          }
+          return b;
+        });
+
+        return {
+          ...prev,
+          students: prev.students.map((s) =>
+            s.id === student.id ? { ...s, pendingBalance: newPending, balance: newPending } : s
+          ),
+          bills: updatedBills,
+          studentPayments: [paymentRecord, ...(prev.studentPayments || [])],
+          auditLogs: [audit, ...prev.auditLogs],
+        };
+      });
 
       addToast(
         'success',

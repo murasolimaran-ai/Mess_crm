@@ -124,10 +124,6 @@ export const BillingPage: React.FC = () => {
       .slice(0, 8);
   }, [state.students, studentSearch]);
 
-  // Frequently selected / line queue students (first 6 active students)
-  const quickQueueStudents = useMemo(() => {
-    return state.students.filter((s) => s.status === 'active').slice(0, 6);
-  }, [state.students]);
 
   // Handle student select
   const handleSelectStudent = (student: Student) => {
@@ -271,48 +267,42 @@ export const BillingPage: React.FC = () => {
 
   return (
     <div className="space-y-4">
-      {/* Top Banner: Shift & POS Status */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      {/* Top Banner */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-md">
+          <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-xs">
             <Utensils className="w-5 h-5" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-sm font-bold text-slate-900 tracking-tight">
-                Kavery Mess &middot; Smart High-Speed POS Counter
-              </h2>
-              <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-300">
-                ACTIVE
-              </span>
-            </div>
+            <h2 className="text-base font-bold text-slate-900 tracking-tight">
+              Mess Billing Counter
+            </h2>
             <p className="text-xs text-slate-500 mt-0.5">
-              Operating Cashier: <strong className="text-slate-800">{currentUser.name}</strong> &middot; Press <kbd className="px-1.5 py-0.5 bg-slate-100 rounded text-[10px] font-mono border">F2</kbd> anytime to jump to student search
+              Cashier: <strong className="text-slate-800">{currentUser.name}</strong>
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        {cart.length > 0 && (
           <button
             onClick={handleClearCart}
-            disabled={cart.length === 0}
-            className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-rose-600 hover:bg-slate-100 rounded-xl transition-colors disabled:opacity-40"
+            className="px-3 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 rounded-xl transition-colors"
           >
             Clear Cart
           </button>
-        </div>
+        )}
       </div>
 
-      {/* Main Split Grid: Left 7 cols for Student Search & Food Menu, Right 5 cols for Order Cart */}
+      {/* Main Split Grid: Left for Student Search & Food Menu, Right for Bill Cart */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-        {/* Left Column: Student Identification & Food Menu Catalog */}
+        {/* Left Column: Student Search & Food Menu Catalog */}
         <div className="lg:col-span-7 xl:col-span-8 space-y-4">
-          {/* Step 1: Student Lookup (NO SMART CARD SCAN, Ultra-fast keyboard lookup) */}
+          {/* Student Search */}
           <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs space-y-3">
             <div className="flex items-center justify-between">
               <label className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
                 <Users className="w-4 h-4 text-blue-600" />
-                <span>1. Identify Student (ID / Name / Room)</span>
+                <span>Student Search</span>
               </label>
 
               {selectedStudent && (
@@ -337,7 +327,7 @@ export const BillingPage: React.FC = () => {
                   setStudentSearch(e.target.value);
                   if (selectedStudent) setSelectedStudent(null);
                 }}
-                placeholder="Type Student ID (e.g. STU-001, STU-042), Name, Room number..."
+                placeholder="Search by Student ID, Name, or Room number..."
                 className="w-full text-xs pl-9 pr-9 py-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium"
               />
               {studentSearch && !selectedStudent && (
@@ -350,7 +340,7 @@ export const BillingPage: React.FC = () => {
               )}
             </div>
 
-            {/* Autocomplete dropdown if searching and unselected */}
+            {/* Autocomplete dropdown when searching */}
             {!selectedStudent && searchedStudents.length > 0 && (
               <div className="border border-slate-200 rounded-xl bg-white shadow-lg overflow-hidden divide-y divide-slate-100 max-h-48 overflow-y-auto">
                 {searchedStudents.map((s) => (
@@ -379,34 +369,9 @@ export const BillingPage: React.FC = () => {
               </div>
             )}
 
-            {/* Quick 1-Tap Student Roster Chips (When no search typed yet) */}
-            {!selectedStudent && !studentSearch && (
-              <div className="pt-1">
-                <span className="text-[11px] font-medium text-slate-500 block mb-1.5">
-                  Quick Select (Counter Queue):
-                </span>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {quickQueueStudents.map((s) => (
-                    <button
-                      key={s.id}
-                      onClick={() => handleSelectStudent(s)}
-                      className="p-2 text-left rounded-xl border border-slate-200 hover:border-blue-400 hover:bg-blue-50/50 transition-all text-xs flex flex-col justify-between"
-                    >
-                      <div className="flex items-center justify-between w-full">
-                        <span className="font-bold font-mono text-blue-600">{s.id}</span>
-                        <span className="text-[10px] text-slate-500 font-mono">{s.roomNumber}</span>
-                      </div>
-                      <span className="font-bold text-slate-900 truncate w-full mt-0.5">{s.name}</span>
-                      <span className="text-[10px] text-slate-500 truncate">{s.department}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
             {/* Selected Student Profile Summary Card */}
             {selectedStudent && (
-              <div className="p-3.5 bg-blue-50/80 border border-blue-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+              <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="font-bold text-slate-900 text-sm">{selectedStudent.name}</span>
@@ -426,26 +391,25 @@ export const BillingPage: React.FC = () => {
                 </div>
 
                 <div className="sm:text-right border-t sm:border-t-0 pt-2 sm:pt-0 border-blue-200">
-                  <div className="text-[11px] text-slate-500">Hostel Credit Balance</div>
-                  <div className="font-bold font-mono text-slate-900">
-                    Pending: <span className={selectedStudent.pendingBalance > 0 ? 'text-amber-600 font-bold' : 'text-emerald-600'}>{formatINR(selectedStudent.pendingBalance)}</span> / Limit {formatINR(selectedStudent.creditLimit)}
+                  <div className="text-[11px] text-slate-500">Current Pending Due</div>
+                  <div className="font-bold font-mono text-sm">
+                    <span className={selectedStudent.pendingBalance > 0 ? 'text-amber-600' : 'text-emerald-600'}>
+                      {formatINR(selectedStudent.pendingBalance)}
+                    </span>
                   </div>
                 </div>
               </div>
             )}
           </div>
 
-          {/* Step 2: Food Menu & Dish Selection */}
+          {/* Food Menu & Dish Selection */}
           <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs space-y-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <label className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
                   <Utensils className="w-4 h-4 text-blue-600" />
-                  <span>2. Select Food Dishes &amp; Add to Bill</span>
+                  <span>Mess Menu</span>
                 </label>
-                <p className="text-[11px] text-slate-500 mt-0.5">
-                  Menu is automatically scheduled based on the active meal timing set in Admin
-                </p>
               </div>
 
               {/* Product Search */}
@@ -792,51 +756,32 @@ export const BillingPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Exclusive Mode: Automatic Student Hostel Credit Account */}
-            <div className="pt-2 border-t border-slate-100 space-y-2">
-              <div className="p-3.5 rounded-2xl bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50/50 border border-amber-200 space-y-2">
+            {/* Payment Method: Hostel Credit */}
+            <div className="pt-2 border-t border-slate-100">
+              <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs space-y-2">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="p-1.5 rounded-xl bg-amber-600 text-white shadow-2xs">
-                      <Wallet className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <span className="text-xs font-bold text-amber-950 uppercase tracking-wide block">
-                        Hostel Credit Account (விடுதி கடன்)
-                      </span>
-                      <span className="text-[10px] text-amber-700 font-semibold">
-                        Automatic Monthly Mess Due Ledger
-                      </span>
-                    </div>
+                  <div className="flex items-center gap-1.5">
+                    <Wallet className="w-4 h-4 text-amber-700" />
+                    <span className="font-bold text-amber-950">
+                      Hostel Credit (நிலுவை கணக்கு)
+                    </span>
                   </div>
-                  <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase bg-amber-200 text-amber-900 border border-amber-300">
-                    PENDING DUE
+                  <span className="px-2 py-0.5 rounded text-[9px] font-extrabold uppercase bg-amber-200 text-amber-900 border border-amber-300">
+                    Pending Due
                   </span>
                 </div>
 
-                <p className="text-[11px] text-slate-600 leading-relaxed">
-                  No counter cash or UPI needed. The amount is automatically charged to the student's mess credit balance and reflected on their student portal.
-                </p>
-
                 {selectedStudent ? (
-                  <div className="pt-2 border-t border-amber-200/80 grid grid-cols-2 gap-2 text-xs">
-                    <div className="bg-white/80 p-2 rounded-xl border border-amber-200/60">
-                      <span className="text-[10px] text-slate-500 block">Current Mess Due:</span>
-                      <strong className="font-mono text-amber-900 font-bold text-xs">
-                        {formatINR(selectedStudent.pendingBalance)}
-                      </strong>
-                    </div>
-                    <div className="bg-white/80 p-2 rounded-xl border border-amber-200/60 text-right">
-                      <span className="text-[10px] text-slate-500 block">Due After This Bill:</span>
-                      <strong className="font-mono text-rose-700 font-extrabold text-xs">
-                        {formatINR(selectedStudent.pendingBalance + grandTotal)}
-                      </strong>
-                    </div>
+                  <div className="pt-1.5 border-t border-amber-200/80 flex items-center justify-between text-[11px]">
+                    <span className="text-slate-600">Pending After Bill:</span>
+                    <strong className="font-mono text-rose-700 font-bold">
+                      {formatINR(selectedStudent.pendingBalance + grandTotal)}
+                    </strong>
                   </div>
                 ) : (
-                  <div className="pt-1 text-[11px] text-amber-800 italic">
-                    Identify student above to view account ledger and room details.
-                  </div>
+                  <p className="text-[11px] text-amber-800">
+                    Select a student to bill to hostel credit.
+                  </p>
                 )}
               </div>
             </div>
@@ -847,13 +792,13 @@ export const BillingPage: React.FC = () => {
                 type="button"
                 onClick={() => handleSubmitBill(false)}
                 disabled={!selectedStudent || cart.length === 0}
-                className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-400 text-white font-bold rounded-2xl shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 text-xs"
+                className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-400 text-white font-bold rounded-xl shadow-xs transition-colors flex items-center justify-center gap-2 text-xs"
               >
-                <CheckCircle2 className="w-4 h-4 text-emerald-200" />
+                <CheckCircle2 className="w-4 h-4" />
                 <span>
                   {selectedStudent
-                    ? `Charge ${formatINR(grandTotal)} to ${selectedStudent.id}'s Credit`
-                    : 'Select Student to Charge Credit'}
+                    ? `Charge ${formatINR(grandTotal)} to ${selectedStudent.name}`
+                    : 'Select Student to Bill'}
                 </span>
               </button>
 
@@ -861,10 +806,10 @@ export const BillingPage: React.FC = () => {
                 type="button"
                 onClick={() => handleSubmitBill(true)}
                 disabled={!selectedStudent || cart.length === 0}
-                className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-100 disabled:text-slate-300 text-white font-semibold rounded-xl transition-all flex items-center justify-center gap-2 text-xs"
+                className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-100 disabled:text-slate-300 text-white font-semibold rounded-xl transition-colors flex items-center justify-center gap-2 text-xs"
               >
                 <Printer className="w-3.5 h-3.5" />
-                <span>Charge to Credit &amp; Print Slip</span>
+                <span>Charge &amp; Print Slip</span>
               </button>
             </div>
           </div>

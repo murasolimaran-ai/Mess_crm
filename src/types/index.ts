@@ -157,6 +157,9 @@ export interface Bill {
   total: number;
   paymentMethod: PaymentMethod;
   paymentStatus: PaymentStatus;
+  paidAt?: string;
+  paymentRef?: string;
+  mealSlot?: MealSlot;
   status: 'completed' | 'cancelled' | 'refunded';
   notes?: string;
   cancelledAt?: string;

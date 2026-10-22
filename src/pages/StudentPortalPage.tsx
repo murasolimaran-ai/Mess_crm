@@ -30,6 +30,7 @@ import {
   ChevronDown,
   Layers,
   UtensilsCrossed,
+  FileText,
 } from 'lucide-react';
 
 export const StudentPortalPage: React.FC = () => {
@@ -64,6 +65,26 @@ export const StudentPortalPage: React.FC = () => {
   const [paymentProcessing, setPaymentProcessing] = useState(false);
   const [lastPaymentRecord, setLastPaymentRecord] = useState<StudentPayment | null>(null);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
+
+  // Mess Due Statement Modal State & Filter
+  const [isDueStatementModalOpen, setIsDueStatementModalOpen] = useState(false);
+  const [statementFilter, setStatementFilter] = useState<'pending' | 'all'>('pending');
+
+  // Bills for the Due Statement modal based on filter
+  const statementBills = useMemo(() => {
+    if (statementFilter === 'pending') {
+      return studentBills.filter((b) => b.paymentStatus === 'pending');
+    }
+    return studentBills;
+  }, [studentBills, statementFilter]);
+
+  const totalStatementAmount = useMemo(() => {
+    return statementBills.reduce((sum, b) => sum + b.totalAmount, 0);
+  }, [statementBills]);
+
+  const totalClearedAmount = useMemo(() => {
+    return studentPayments.reduce((sum, p) => sum + p.amount, 0);
+  }, [studentPayments]);
 
   // Filtered bills
   const filteredBills = useMemo(() => {
@@ -126,7 +147,7 @@ export const StudentPortalPage: React.FC = () => {
   };
 
   const handlePrintStatement = () => {
-    window.print();
+    setIsDueStatementModalOpen(true);
   };
 
   return (
@@ -146,7 +167,7 @@ export const StudentPortalPage: React.FC = () => {
               <div className="flex flex-wrap items-center gap-2">
                 <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 flex items-center gap-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  Student Mess Member
+                  Hostel Resident
                 </span>
                 <span className="font-mono text-xs text-blue-200 font-semibold bg-blue-950/60 px-2 py-0.5 rounded-lg border border-blue-700/50">
                   {student.id}
@@ -171,10 +192,11 @@ export const StudentPortalPage: React.FC = () => {
           <div className="flex items-center gap-2 self-start md:self-center">
             <button
               onClick={handlePrintStatement}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-white/10 hover:bg-white/20 rounded-xl transition-colors backdrop-blur-xs border border-white/15"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-500 rounded-xl transition-all shadow-md hover:shadow-lg border border-blue-400/40"
+              title="Print Mess Due Amount Statement (கட்டண நிலுவை அறிக்கை)"
             >
-              <Printer className="w-3.5 h-3.5" />
-              <span>Print Statement</span>
+              <FileText className="w-3.5 h-3.5" />
+              <span>Print Due Statement (நிலுவை அறிக்கை)</span>
             </button>
             <button
               onClick={() => {
@@ -225,14 +247,24 @@ export const StudentPortalPage: React.FC = () => {
             </p>
           </div>
 
-          <button
-            onClick={handleOpenPaymentModal}
-            disabled={student.pendingBalance <= 0}
-            className="w-full py-2.5 px-3 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 active:bg-blue-800 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed rounded-xl transition-colors shadow-xs flex items-center justify-center gap-1.5"
-          >
-            <CreditCard className="w-3.5 h-3.5" />
-            <span>{student.pendingBalance > 0 ? 'Pay Mess Bill Online' : 'No Dues Pending'}</span>
-          </button>
+          <div className="flex items-center gap-2 mt-1">
+            <button
+              onClick={handleOpenPaymentModal}
+              disabled={student.pendingBalance <= 0}
+              className="flex-1 py-2.5 px-3 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 active:bg-blue-800 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed rounded-xl transition-colors shadow-xs flex items-center justify-center gap-1.5"
+            >
+              <CreditCard className="w-3.5 h-3.5" />
+              <span>{student.pendingBalance > 0 ? 'Pay Online' : 'No Dues'}</span>
+            </button>
+            <button
+              onClick={() => setIsDueStatementModalOpen(true)}
+              className="py-2.5 px-3 text-xs font-semibold text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors flex items-center justify-center gap-1 border border-slate-200"
+              title="View & Print Mess Due Statement"
+            >
+              <FileText className="w-3.5 h-3.5 text-blue-600" />
+              <span>Statement</span>
+            </button>
+          </div>
         </div>
 
         {/* Credit Limit & Remaining Card */}
@@ -363,13 +395,15 @@ export const StudentPortalPage: React.FC = () => {
                     <th className="py-3 px-4">Dishes / Items</th>
                     <th className="py-3 px-4">Payment Mode</th>
                     <th className="py-3 px-4 text-right">Amount</th>
+                    <th className="py-3 px-4 text-center">Payment Status (நிலை)</th>
+                    <th className="py-3 px-4 text-center">Payment Date (செலுத்திய தேதி)</th>
                     <th className="py-3 px-4 text-center">Receipt</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {filteredBills.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="py-10 text-center text-slate-400">
+                      <td colSpan={7} className="py-10 text-center text-slate-400">
                         No mess invoices found.
                       </td>
                     </tr>
@@ -408,6 +442,35 @@ export const StudentPortalPage: React.FC = () => {
 
                         <td className="py-3 px-4 text-right font-mono font-bold text-slate-900">
                           {formatINR(bill.totalAmount)}
+                        </td>
+
+                        <td className="py-3 px-4 text-center">
+                          {bill.paymentStatus === 'paid' ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                              <span>Paid</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-200">
+                              <AlertCircle className="w-3 h-3 text-rose-600" />
+                              <span>Pending Due</span>
+                            </span>
+                          )}
+                        </td>
+
+                        <td className="py-3 px-4 text-center font-mono text-[11px]">
+                          {bill.paymentStatus === 'paid' && bill.paidAt ? (
+                            <div>
+                              <div className="font-semibold text-slate-800">{formatDateTime(bill.paidAt)}</div>
+                              {bill.paymentRef && (
+                                <div className="text-[10px] text-slate-400 font-mono">Ref: {bill.paymentRef}</div>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-amber-700 font-sans font-medium text-[11px] bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                              Pending Clearance
+                            </span>
+                          )}
                         </td>
 
                         <td className="py-3 px-4 text-center">
@@ -771,6 +834,356 @@ export const StudentPortalPage: React.FC = () => {
           isOpen={!!selectedBill}
           onClose={() => setSelectedBill(null)}
         />
+      )}
+
+      {/* Official Mess Due Amount Statement (விடுதி கட்டண நிலுவை அறிக்கை) Modal */}
+      {isDueStatementModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl max-w-4xl w-full border border-slate-200 overflow-hidden my-4 sm:my-8 animate-in fade-in zoom-in-95 duration-150">
+            {/* Top Control Bar (Hidden when printing via no-print) */}
+            <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-b border-slate-200 bg-slate-50 no-print">
+              <div className="flex items-center gap-2">
+                <span className="p-1.5 rounded-lg bg-blue-600 text-white">
+                  <FileText className="w-4 h-4" />
+                </span>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">
+                    Mess Due Amount Statement / விடுதி கட்டண நிலுவை அறிக்கை
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Official Student Dining Ledger for Hostel Clearance &amp; Verification
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {/* View Filter: Pending Only vs All Bills */}
+                <div className="inline-flex rounded-xl bg-slate-200 p-0.5 text-xs font-semibold">
+                  <button
+                    type="button"
+                    onClick={() => setStatementFilter('pending')}
+                    className={`px-2.5 py-1 rounded-lg transition-all ${
+                      statementFilter === 'pending'
+                        ? 'bg-white text-rose-700 shadow-xs font-bold'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Pending Dues Only ({studentBills.filter((b) => b.paymentStatus === 'pending').length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStatementFilter('all')}
+                    className={`px-2.5 py-1 rounded-lg transition-all ${
+                      statementFilter === 'all'
+                        ? 'bg-white text-blue-700 shadow-xs font-bold'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    All Invoices ({studentBills.length})
+                  </button>
+                </div>
+
+                <button
+                  onClick={() => window.print()}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 rounded-xl hover:bg-blue-700 transition-colors shadow-xs"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  <span>Print</span>
+                </button>
+
+                <button
+                  onClick={() => setIsDueStatementModalOpen(false)}
+                  className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-200 transition-colors"
+                  aria-label="Close"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Printable Statement Document Content */}
+            <div className="p-6 sm:p-8 printable-area bg-white text-slate-900 font-sans space-y-6">
+              {/* Official Letterhead */}
+              <div className="border-b-2 border-slate-900 pb-4 text-center space-y-1">
+                <div className="flex items-center justify-center gap-2 mb-1">
+                  <span className="p-1.5 rounded-full bg-slate-900 text-white inline-flex items-center justify-center">
+                    <UtensilsCrossed className="w-5 h-5" />
+                  </span>
+                  <h1 className="text-xl sm:text-2xl font-black uppercase tracking-wider text-slate-950 font-serif">
+                    {state.settings.messName || 'KAVERY HOSTEL MESS & DINING SYSTEM'}
+                  </h1>
+                </div>
+                <p className="text-xs text-slate-600 font-medium">
+                  Student Mess &amp; Catering Department &bull; Hostel Administration Block
+                </p>
+                <div className="inline-block mt-1 px-3 py-1 rounded-md bg-slate-100 border border-slate-300">
+                  <h2 className="text-xs sm:text-sm font-extrabold tracking-wide uppercase text-slate-900">
+                    MESS DUE AMOUNT STATEMENT / விடுதி கட்டண நிலுவை அறிக்கை
+                  </h2>
+                </div>
+                <div className="flex flex-wrap items-center justify-between text-[11px] text-slate-500 pt-2 font-mono">
+                  <span>Statement Ref: STMT-{student.id}-{Date.now().toString().slice(-6)}</span>
+                  <span>Generated Date: {formatDateTime(new Date().toISOString())}</span>
+                </div>
+              </div>
+
+              {/* Student Profile & Room Details Header Box */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs">
+                <div>
+                  <span className="text-[10px] font-bold text-slate-500 uppercase block">Student Name</span>
+                  <span className="font-bold text-slate-900 text-sm">{student.name}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold text-slate-500 uppercase block">Roll / Student ID</span>
+                  <span className="font-mono font-bold text-slate-900 text-sm">{student.id}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold text-slate-500 uppercase block">Hostel &amp; Room</span>
+                  <span className="font-semibold text-slate-800">{student.hostelBlock}, Rm {student.roomNumber}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold text-slate-500 uppercase block">Dept &amp; Year</span>
+                  <span className="font-semibold text-slate-800">{student.department} &bull; Year {student.year}</span>
+                </div>
+              </div>
+
+              {/* Due & Balance Summary Highlight Box */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="p-3.5 rounded-xl border border-slate-200 bg-white">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                    Total Incurred Bills ({studentBills.length} Orders)
+                  </span>
+                  <span className="text-lg font-bold text-slate-900 font-mono">
+                    {formatINR(studentBills.reduce((s, b) => s + b.totalAmount, 0))}
+                  </span>
+                </div>
+
+                <div className="p-3.5 rounded-xl border border-slate-200 bg-white">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                    Total Cleared / Paid Amount
+                  </span>
+                  <span className="text-lg font-bold text-emerald-600 font-mono">
+                    {formatINR(totalClearedAmount)}
+                  </span>
+                </div>
+
+                <div className="p-3.5 rounded-xl border-2 border-rose-500 bg-rose-50/50">
+                  <span className="text-[10px] font-black text-rose-800 uppercase tracking-wider block">
+                    Net Outstanding Mess Due (நிலுவை தொகை)
+                  </span>
+                  <span className="text-2xl font-black text-rose-700 font-mono">
+                    {formatINR(student.pendingBalance)}
+                  </span>
+                  <span className="text-[10px] text-rose-600 block mt-0.5 font-medium">
+                    {student.pendingBalance > 0 ? 'Clearance Required Before Mess Cut-off' : 'All Mess Dues Cleared!'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Statement Items Table */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                    {statementFilter === 'pending'
+                      ? 'Unsettled Pending Due Invoices (நிலுவை பில்கள் விவரம்)'
+                      : 'Complete Itemized Dining Records (அனைத்து உணவு பில்கள்)'}
+                  </h4>
+                  <span className="text-[11px] text-slate-500 font-mono">
+                    Showing {statementBills.length} invoice{statementBills.length === 1 ? '' : 's'}
+                  </span>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border border-slate-200 border-collapse">
+                    <thead>
+                      <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-300">
+                        <th className="p-2 border-r border-slate-200 w-10 text-center">#</th>
+                        <th className="p-2 border-r border-slate-200">Bill No &amp; Date</th>
+                        <th className="p-2 border-r border-slate-200">Dishes / Meals Consumed</th>
+                        <th className="p-2 border-r border-slate-200 text-right">Amount (₹)</th>
+                        <th className="p-2 border-r border-slate-200 text-center">Payment Status (நிலை)</th>
+                        <th className="p-2 text-center">Payment Date (செலுத்திய தேதி)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200">
+                      {statementBills.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="p-6 text-center text-slate-500">
+                            {statementFilter === 'pending'
+                              ? 'No pending mess dues! All invoices have been successfully paid.'
+                              : 'No dining records found for this student.'}
+                          </td>
+                        </tr>
+                      ) : (
+                        statementBills.map((b, idx) => (
+                          <tr key={b.id} className="odd:bg-white even:bg-slate-50/50">
+                            <td className="p-2 border-r border-slate-200 text-center font-mono text-slate-500">
+                              {idx + 1}
+                            </td>
+                            <td className="p-2 border-r border-slate-200 font-mono">
+                              <div className="font-bold text-slate-900">{b.billNumber}</div>
+                              <div className="text-[10px] text-slate-500">{formatDateTime(b.timestamp)}</div>
+                            </td>
+                            <td className="p-2 border-r border-slate-200">
+                              <div className="font-medium text-slate-800 line-clamp-1">
+                                {b.items.map((i) => `${i.productName} × ${i.quantity}`).join(', ')}
+                              </div>
+                              <div className="text-[10px] text-slate-500">
+                                Slot: {b.mealSlot ? b.mealSlot.toUpperCase() : 'MEAL'} &bull; Mode: {b.paymentMethod.replace('_', ' ').toUpperCase()}
+                              </div>
+                            </td>
+                            <td className="p-2 border-r border-slate-200 text-right font-mono font-bold text-slate-900">
+                              {formatINR(b.totalAmount)}
+                            </td>
+                            <td className="p-2 border-r border-slate-200 text-center">
+                              {b.paymentStatus === 'paid' ? (
+                                <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                  PAID (செலுத்தப்பட்டது)
+                                </span>
+                              ) : (
+                                <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-300">
+                                  PENDING DUE (நிலுவை)
+                                </span>
+                              )}
+                            </td>
+                            <td className="p-2 text-center font-mono text-[11px]">
+                              {b.paymentStatus === 'paid' && b.paidAt ? (
+                                <div>
+                                  <div className="font-bold text-slate-900">{formatDateTime(b.paidAt)}</div>
+                                  {b.paymentRef && (
+                                    <div className="text-[9px] text-slate-500">Ref: {b.paymentRef}</div>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-rose-600 font-sans font-semibold text-[10px]">
+                                  Pending Clearance
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                    <tfoot>
+                      <tr className="bg-slate-100 font-bold border-t-2 border-slate-300 text-slate-900">
+                        <td colSpan={3} className="p-2 text-right uppercase text-[11px] border-r border-slate-200">
+                          Statement Subtotal:
+                        </td>
+                        <td className="p-2 text-right font-mono text-sm border-r border-slate-200">
+                          {formatINR(totalStatementAmount)}
+                        </td>
+                        <td colSpan={2} className="p-2 text-center text-xs text-slate-500">
+                          Net Outstanding Balance: <strong className="text-rose-600 font-mono">{formatINR(student.pendingBalance)}</strong>
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+
+              {/* Cleared Payments Log Table if payments exist */}
+              {studentPayments.length > 0 && (
+                <div className="space-y-2 pt-2">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                    Payment Clearance Receipts Log (செலுத்தப்பட்ட பரிவர்த்தனைகள்)
+                  </h4>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs border border-slate-200 border-collapse">
+                      <thead>
+                        <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-300">
+                          <th className="p-2 border-r border-slate-200">Receipt / Pay #</th>
+                          <th className="p-2 border-r border-slate-200">Date &amp; Time</th>
+                          <th className="p-2 border-r border-slate-200">Mode</th>
+                          <th className="p-2 border-r border-slate-200">Txn Reference</th>
+                          <th className="p-2 border-r border-slate-200 text-right">Amount Paid</th>
+                          <th className="p-2 text-right">Remaining Due</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200">
+                        {studentPayments.map((p) => (
+                          <tr key={p.id} className="odd:bg-white even:bg-slate-50/50 font-mono">
+                            <td className="p-2 border-r border-slate-200 font-bold text-slate-900">
+                              {p.paymentNumber}
+                            </td>
+                            <td className="p-2 border-r border-slate-200 text-slate-600 text-[11px]">
+                              {formatDateTime(p.timestamp)}
+                            </td>
+                            <td className="p-2 border-r border-slate-200 font-sans uppercase font-bold text-[10px] text-slate-700">
+                              {p.paymentMethod}
+                            </td>
+                            <td className="p-2 border-r border-slate-200 text-slate-600 text-[10px]">
+                              {p.transactionRef}
+                            </td>
+                            <td className="p-2 border-r border-slate-200 text-right font-bold text-emerald-600">
+                              {formatINR(p.amount)}
+                            </td>
+                            <td className="p-2 text-right font-bold text-rose-600">
+                              {formatINR(p.remainingBalance)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Official Endorsement and Signatures Section */}
+              <div className="pt-8 border-t border-slate-300 grid grid-cols-3 gap-6 text-center text-xs">
+                <div className="space-y-12">
+                  <div className="h-8" />
+                  <div className="border-t border-dashed border-slate-400 pt-1 font-semibold text-slate-700">
+                    Student Signature
+                    <div className="text-[10px] text-slate-400 font-normal">{student.name}</div>
+                  </div>
+                </div>
+
+                <div className="space-y-12">
+                  <div className="h-8" />
+                  <div className="border-t border-dashed border-slate-400 pt-1 font-semibold text-slate-700">
+                    Mess Accountant / Cashier
+                    <div className="text-[10px] text-slate-400 font-normal">Dining Accounts Office</div>
+                  </div>
+                </div>
+
+                <div className="space-y-12">
+                  <div className="h-8" />
+                  <div className="border-t border-dashed border-slate-400 pt-1 font-semibold text-slate-700">
+                    Hostel Warden / Mess Manager
+                    <div className="text-[10px] text-slate-400 font-normal">Official Stamp &amp; Signature</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Print Watermark / Compliance Notice */}
+              <div className="text-[10px] text-slate-400 text-center border-t border-slate-100 pt-3">
+                * This document is an official computer-generated student mess due statement. For billing discrepancies, contact the Hostel Mess Office within 3 days.
+              </div>
+            </div>
+
+            {/* Modal Bottom Actions (Hidden when printing via no-print) */}
+            <div className="px-6 py-3 border-t border-slate-200 bg-slate-50 flex flex-wrap items-center justify-between gap-2 no-print">
+              <span className="text-xs text-slate-500">
+                Use standard A4 portrait or landscape print settings for physical clearance submission.
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setIsDueStatementModalOpen(false)}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 bg-white border border-slate-300 rounded-xl hover:bg-slate-100 transition-colors"
+                >
+                  Close
+                </button>
+                <button
+                  onClick={() => window.print()}
+                  className="px-5 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-xs transition-colors flex items-center gap-1.5"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  <span>Print Mess Due Statement</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
